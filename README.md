@@ -10,6 +10,12 @@
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack_Compose-4285F4?style=for-the-badge&logo=android&logoColor=white">
 </p>
 
+<p align="center">
+  <a href="https://github.com/redmas45/Split_app/releases/latest">
+    <img alt="Download APK" src="https://img.shields.io/badge/Download_APK-FF4081?style=for-the-badge&logo=android&logoColor=white">
+  </a>
+</p>
+
 ---
 
 ## 🌟 Features

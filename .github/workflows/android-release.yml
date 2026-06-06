@@ -32,8 +32,8 @@ jobs:
       - name: Update 'Latest' Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build 🚀
+          tag_name: v1.0.${{ github.run_number }}
+          name: Build v1.0.${{ github.run_number }} 🚀
           body: "Automated build of the latest code pushed to main. Download the APK below!"
           files: app/build/outputs/apk/debug/app-debug.apk
           prerelease: true

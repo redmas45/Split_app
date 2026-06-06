@@ -1,5 +1,9 @@
 package com.example.splitapp.ui.main
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,11 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation3.runtime.NavKey
+import com.example.splitapp.data.FirebaseService
+import kotlinx.coroutines.launch
 
 data class Member(val id: Int, val name: String)
 
@@ -29,20 +35,81 @@ sealed class Transaction {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    onItemClick: (NavKey) -> Unit,
+    groupId: String,
+    groupName: String,
+    firebaseService: FirebaseService,
+    onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var members by remember { mutableStateOf(listOf(Member(1, "Person A"), Member(2, "Person B"))) }
-    var nextMemberId by remember { mutableIntStateOf(3) }
-    var transactions by remember { mutableStateOf<List<Transaction>>(emptyList()) }
-    var nextTxId by remember { mutableIntStateOf(1) }
-
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    val groupState = remember(groupId) { firebaseService.observeGroup(groupId) }.collectAsState(initial = null)
     var currentTab by remember { mutableStateOf("Members") }
+
+    val group = groupState.value
+
+    if (group == null) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+        return
+    }
+
+    // Map Firestore document data to domain models
+    val members = group.members.mapNotNull { map ->
+        val id = (map["id"] as? Number)?.toInt()
+        val name = map["name"] as? String
+        if (id != null && name != null) Member(id, name) else null
+    }
+
+    val transactions = group.transactions.mapNotNull { map ->
+        val id = (map["id"] as? Number)?.toInt() ?: return@mapNotNull null
+        val type = map["type"] as? String ?: return@mapNotNull null
+        val amount = map["amount"] as? String ?: return@mapNotNull null
+        when (type) {
+            "expense" -> {
+                val description = map["description"] as? String ?: ""
+                val payerId = (map["payerId"] as? Number)?.toInt() ?: return@mapNotNull null
+                Transaction.Expense(id, description, payerId, amount)
+            }
+            "transfer" -> {
+                val fromId = (map["fromId"] as? Number)?.toInt() ?: return@mapNotNull null
+                val toId = (map["toId"] as? Number)?.toInt() ?: return@mapNotNull null
+                Transaction.Transfer(id, fromId, toId, amount)
+            }
+            else -> null
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Expense Splitter", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text(groupName, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Code: $groupId", 
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Text("⬅️", fontSize = 20.sp)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Group ID", groupId)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Group code copied to clipboard!", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("📋", fontSize = 20.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -72,8 +139,42 @@ fun MainScreen(
     ) { paddingValues ->
         Box(modifier = modifier.fillMaxSize().padding(paddingValues)) {
             when (currentTab) {
-                "Members" -> MembersTab(members, { members = it }, { nextMemberId++ }, nextMemberId)
-                "Ledger" -> TransactionsTab(members, transactions, { transactions = it }, { nextTxId++ }, nextTxId)
+                "Members" -> MembersTab(
+                    members = members,
+                    onMembersChange = { updatedMembers ->
+                        coroutineScope.launch {
+                            val membersMap = updatedMembers.map { mapOf("id" to it.id, "name" to it.name) }
+                            firebaseService.updateGroupData(groupId, membersMap, group.transactions)
+                        }
+                    }
+                )
+                "Ledger" -> TransactionsTab(
+                    members = members,
+                    transactions = transactions,
+                    onTxChange = { updatedTxs ->
+                        coroutineScope.launch {
+                            val txsMap = updatedTxs.map { tx ->
+                                when (tx) {
+                                    is Transaction.Expense -> mapOf(
+                                        "id" to tx.id,
+                                        "type" to "expense",
+                                        "description" to tx.description,
+                                        "payerId" to tx.payerId,
+                                        "amount" to tx.amount
+                                    )
+                                    is Transaction.Transfer -> mapOf(
+                                        "id" to tx.id,
+                                        "type" to "transfer",
+                                        "fromId" to tx.fromId,
+                                        "toId" to tx.toId,
+                                        "amount" to tx.amount
+                                    )
+                                }
+                            }
+                            firebaseService.updateGroupData(groupId, group.members, txsMap)
+                        }
+                    }
+                )
                 "Summary" -> SummaryTab(members, transactions)
             }
         }
@@ -83,9 +184,7 @@ fun MainScreen(
 @Composable
 fun MembersTab(
     members: List<Member>,
-    onMembersChange: (List<Member>) -> Unit,
-    onNextId: () -> Unit,
-    nextId: Int
+    onMembersChange: (List<Member>) -> Unit
 ) {
     var newName by remember { mutableStateOf("") }
 
@@ -105,7 +204,7 @@ fun MembersTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(member.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        if (members.size > 2) {
+                        if (members.size > 1) {
                             Text(
                                 "❌",
                                 modifier = Modifier.clickable {
@@ -130,9 +229,9 @@ fun MembersTab(
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
-                    if (newName.isNotBlank() && members.size < 10) {
-                        onMembersChange(members + Member(nextId, newName.trim()))
-                        onNextId()
+                    if (newName.isNotBlank() && members.size < 30) {
+                        val maxId = members.maxOfOrNull { it.id } ?: 0
+                        onMembersChange(members + Member(maxId + 1, newName.trim()))
                         newName = ""
                     }
                 },
@@ -149,9 +248,7 @@ fun MembersTab(
 fun TransactionsTab(
     members: List<Member>,
     transactions: List<Transaction>,
-    onTxChange: (List<Transaction>) -> Unit,
-    onNextId: () -> Unit,
-    nextId: Int
+    onTxChange: (List<Transaction>) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var txType by remember { mutableStateOf("Expense") }
@@ -213,7 +310,13 @@ fun TransactionsTab(
         }
         
         FloatingActionButton(
-            onClick = { showAddDialog = true },
+            onClick = { 
+                if (members.isNotEmpty()) {
+                    payerId = members.first().id
+                    receiverId = members.getOrNull(1)?.id ?: members.first().id
+                }
+                showAddDialog = true 
+            },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
         ) {
             Text("➕", fontSize = 24.sp)
@@ -303,13 +406,13 @@ fun TransactionsTab(
                     onClick = {
                         val amt = amount.toDoubleOrNull()
                         if (amt != null && amt > 0) {
+                            val maxId = transactions.maxOfOrNull { it.id } ?: 0
+                            val nextId = maxId + 1
                             if (txType == "Expense" && desc.isNotBlank()) {
                                 onTxChange(transactions + Transaction.Expense(nextId, desc, payerId, amount))
-                                onNextId()
                                 showAddDialog = false
                             } else if (txType == "Transfer" && payerId != receiverId) {
                                 onTxChange(transactions + Transaction.Transfer(nextId, payerId, receiverId, amount))
-                                onNextId()
                                 showAddDialog = false
                             }
                         }

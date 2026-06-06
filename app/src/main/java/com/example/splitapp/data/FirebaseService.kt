@@ -145,7 +145,7 @@ class FirebaseService {
         val listener = db.collection("users").document(userId)
             .addSnapshotListener { userSnapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 
@@ -160,7 +160,7 @@ class FirebaseService {
                 db.collection("groups").whereIn("id", groupIds)
                     .addSnapshotListener { groupsSnapshot, groupsError ->
                         if (groupsError != null) {
-                            close(groupsError)
+                            trySend(emptyList())
                             return@addSnapshotListener
                         }
                         val list = groupsSnapshot?.documents?.mapNotNull { doc ->
@@ -176,7 +176,7 @@ class FirebaseService {
         val listener = db.collection("groups").document(groupId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 if (snapshot != null && snapshot.exists()) {
@@ -209,7 +209,7 @@ class FirebaseService {
         val listener = db.collection("users")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val list = snapshot?.documents?.mapNotNull { doc ->
@@ -224,7 +224,7 @@ class FirebaseService {
         val listener = db.collection("groups")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val list = snapshot?.documents?.mapNotNull { doc ->

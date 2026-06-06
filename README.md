@@ -20,6 +20,9 @@
 
 ## 🌟 Features
 
+- **Multi-User Authentication:** Fast and secure user accounts utilizing email and password via Firebase Authentication.
+- **Real-Time Syncing:** All expenses, group members, and transfers are synced instantly using Google Cloud Firestore, keeping all users up to date dynamically.
+- **Create & Join Groups:** Share unique, generated group codes to easily invite friends and family to join your ledger.
 - **Itemized Ledger System:** Record specific expenses (e.g. "Movie Tickets") and specify who paid for them.
 - **Peer-to-Peer Transfers:** Log direct cash advances or payments from one person to another (e.g. "Person A gave Person B an advance of ₹1500").
 - **Smart Settlements:** Automatically calculates the total group expenditure, balances out all expenses and transfers, and utilizes a greedy algorithm to output the absolute minimal number of direct transactions required to square up everyone.

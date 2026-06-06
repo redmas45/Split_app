@@ -82,6 +82,7 @@ class FirebaseService {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     suspend fun joinGroup(groupId: String, userName: String): Result<Unit> {
         val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
         return try {
@@ -110,6 +111,7 @@ class FirebaseService {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun getUserGroups(): Flow<List<Map<String, Any>>> = callbackFlow {
         val userId = auth.currentUser?.uid
         if (userId == null) {

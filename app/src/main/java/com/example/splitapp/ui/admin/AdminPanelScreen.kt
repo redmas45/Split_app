@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.splitapp.data.FirebaseService
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @Suppress("UNCHECKED_CAST", "DEPRECATION")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,7 @@ fun AdminPanelScreen(
                     }
 
                     TabSection(
+                        firebaseService = firebaseService,
                         users = users,
                         groups = groups,
                         userSearchQuery = userSearchQuery,
@@ -198,6 +200,7 @@ fun MetricCard(
 @Suppress("UNCHECKED_CAST", "DEPRECATION")
 @Composable
 fun TabSection(
+    firebaseService: FirebaseService,
     users: List<Map<String, Any>>,
     groups: List<Map<String, Any>>,
     userSearchQuery: String,
@@ -206,6 +209,7 @@ fun TabSection(
     onGroupSearchChange: (String) -> Unit,
     onGroupClick: (List<Map<String, Any>>, String) -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -241,16 +245,74 @@ fun TabSection(
                     val email = user["email"] as? String ?: "No Email"
                     val uid = user["uid"] as? String ?: ""
                     val userGroups = user["groups"] as? List<*> ?: emptyList<Any>()
+                    val isBanned = user["isBanned"] as? Boolean ?: false
+                    val isSuperAdmin = email == com.example.splitapp.data.ADMIN_EMAIL
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(email, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(email, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                if (isSuperAdmin) {
+                                    Text(
+                                        text = "Super Admin 👑",
+                                        color = Color(0xFFD4AF37),
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                } else if (isBanned) {
+                                    Text(
+                                        text = "Banned 🚫",
+                                        color = Color.Red,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("UID: $uid", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text("Groups Joined: ${userGroups.size}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            
+                            if (!isSuperAdmin) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                firebaseService.banUser(uid, !isBanned)
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isBanned) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(if (isBanned) "Unban" else "Ban User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                firebaseService.deleteUser(uid)
+                                            }
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = Color(0xFFC62828)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text("Delete User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -280,20 +342,11 @@ fun TabSection(
                     val transactions = group["transactions"] as? List<Map<String, Any>> ?: emptyList()
 
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            onGroupClick(transactions, name)
-                        },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text("🔍 View Ledger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                            }
+                            Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("ID: $id", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Spacer(modifier = Modifier.height(6.dp))
@@ -304,6 +357,33 @@ fun TabSection(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        onGroupClick(transactions, name)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF203A43)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("🔍 View Ledger", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                
+                                OutlinedButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            firebaseService.deleteGroup(id)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("🗑️ Delete Group", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }

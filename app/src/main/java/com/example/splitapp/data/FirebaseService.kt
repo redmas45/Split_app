@@ -212,6 +212,42 @@ class FirebaseService {
             }
         awaitClose { listener.remove() }
     }
+
+    suspend fun checkIsBanned(uid: String): Boolean {
+        return try {
+            val snapshot = db.collection("users").document(uid).get().await()
+            snapshot.getBoolean("isBanned") ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun banUser(uid: String, ban: Boolean): Result<Unit> {
+        return try {
+            db.collection("users").document(uid).update("isBanned", ban).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteGroup(groupId: String): Result<Unit> {
+        return try {
+            db.collection("groups").document(groupId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteUser(uid: String): Result<Unit> {
+        return try {
+            db.collection("users").document(uid).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
 
 const val ADMIN_EMAIL = "kalimateym2@gmail.com"

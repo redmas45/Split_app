@@ -19,7 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.splitapp.data.FirebaseService
+import com.example.splitapp.data.NotificationHelper
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,8 +33,46 @@ fun GroupSelectionScreen(
     onAdminClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val groupsState = firebaseService.getUserGroups().collectAsState(initial = null)
+    
+    val lastSeenTxIds = remember { mutableStateMapOf<String, Int>() }
+
+    LaunchedEffect(groupsState.value) {
+        val groups = groupsState.value
+        if (groups != null) {
+            groups.forEach { group ->
+                val groupId = group["id"] as? String ?: ""
+                val groupName = group["name"] as? String ?: "Group"
+                val txList = group["transactions"] as? List<*> ?: emptyList<Any>()
+                val maxTxId = txList.mapNotNull { 
+                    val txMap = it as? Map<*, *>
+                    (txMap?.get("id") as? Number)?.toInt() 
+                }.maxOrNull() ?: 0
+                
+                val lastSeen = lastSeenTxIds[groupId]
+                if (lastSeen != null && maxTxId > lastSeen) {
+                    val newTx = txList.lastOrNull() as? Map<*, *>
+                    if (newTx != null) {
+                        val amount = newTx["amount"] as? String ?: "0"
+                        val type = newTx["type"] as? String ?: "expense"
+                        val detail = if (type == "expense") {
+                            newTx["description"] as? String ?: "Expense"
+                        } else {
+                            "Transfer"
+                        }
+                        NotificationHelper.showPaymentNotification(
+                            context = context,
+                            title = "New Activity in $groupName 💸",
+                            text = "$detail: ₹$amount"
+                        )
+                    }
+                }
+                lastSeenTxIds[groupId] = maxTxId
+            }
+        }
+    }
     
     var showCreateDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }

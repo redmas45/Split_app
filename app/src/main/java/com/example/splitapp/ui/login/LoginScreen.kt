@@ -279,8 +279,11 @@ fun LoginScreen(
                                     )
 
                                     val credential = result.credential
-                                    if (credential is com.google.android.libraries.identity.googleid.GoogleIdTokenCredential) {
-                                        val idToken = credential.idToken
+                                    if (credential is androidx.credentials.CustomCredential &&
+                                        credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                        
+                                        val googleIdTokenCredential = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                                        val idToken = googleIdTokenCredential.idToken
                                         val signInResult = firebaseService.signInWithGoogle(idToken)
                                         if (signInResult.isSuccess) {
                                             onLoginSuccess()
@@ -290,8 +293,8 @@ fun LoginScreen(
                                     } else {
                                         errorMessage = "Unexpected credential type."
                                     }
-                                } catch (e: GetCredentialException) {
-                                    errorMessage = "Google Sign In Failed: ${e.message}"
+                                } catch (e: androidx.credentials.exceptions.GetCredentialException) {
+                                    errorMessage = "Google Sign In Cancelled"
                                 } catch (e: Exception) {
                                     errorMessage = "Error: ${e.message}"
                                 } finally {

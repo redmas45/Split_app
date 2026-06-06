@@ -96,6 +96,26 @@ fun MainScreen(
         }
     }
 
+    val previousTxCount = remember { mutableIntStateOf(-1) }
+    
+    LaunchedEffect(transactions.size) {
+        if (previousTxCount.intValue != -1 && transactions.size > previousTxCount.intValue) {
+            val latestTx = transactions.lastOrNull()
+            if (latestTx != null) {
+                val text = when (latestTx) {
+                    is Transaction.Expense -> "New Expense: ₹${latestTx.amount} for ${latestTx.description}"
+                    is Transaction.Transfer -> "New Transfer: ₹${latestTx.amount}"
+                }
+                com.example.splitapp.data.NotificationHelper.showPaymentNotification(
+                    context = context,
+                    title = "New Activity in $groupName",
+                    text = text
+                )
+            }
+        }
+        previousTxCount.intValue = transactions.size
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

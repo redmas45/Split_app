@@ -21,7 +21,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
+import com.example.splitapp.R
 import com.example.splitapp.data.FirebaseService
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
 @Composable
@@ -36,6 +43,7 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     // Vibrant futuristic gradient background
@@ -236,6 +244,68 @@ fun LoginScreen(
                                 fontSize = 15.sp
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text("OR", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Google Sign In Button
+                    OutlinedButton(
+                        onClick = {
+                            isLoading = true
+                            errorMessage = null
+                            coroutineScope.launch {
+                                try {
+                                    val credentialManager = CredentialManager.create(context)
+                                    val webClientId = context.getString(R.string.default_web_client_id)
+                                    
+                                    val googleIdOption = GetGoogleIdOption.Builder()
+                                        .setFilterByAuthorizedAccounts(false)
+                                        .setServerClientId(webClientId)
+                                        .setAutoSelectEnabled(true)
+                                        .build()
+
+                                    val request = GetCredentialRequest.Builder()
+                                        .addCredentialOption(googleIdOption)
+                                        .build()
+
+                                    val result = credentialManager.getCredential(
+                                        request = request,
+                                        context = context,
+                                    )
+
+                                    val credential = result.credential
+                                    if (credential is com.google.android.libraries.identity.googleid.GoogleIdTokenCredential) {
+                                        val idToken = credential.idToken
+                                        val signInResult = firebaseService.signInWithGoogle(idToken)
+                                        if (signInResult.isSuccess) {
+                                            onLoginSuccess()
+                                        } else {
+                                            errorMessage = signInResult.exceptionOrNull()?.localizedMessage ?: "Google Sign In Failed"
+                                        }
+                                    } else {
+                                        errorMessage = "Unexpected credential type."
+                                    }
+                                } catch (e: GetCredentialException) {
+                                    errorMessage = "Google Sign In Failed: ${e.message}"
+                                } catch (e: Exception) {
+                                    errorMessage = "Error: ${e.message}"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Text("Continue with Google", fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))

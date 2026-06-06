@@ -50,6 +50,28 @@ class FirebaseService {
         }
     }
 
+    suspend fun signInWithGoogle(idToken: String): Result<com.google.firebase.auth.AuthResult> {
+        return try {
+            val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+            val result = auth.signInWithCredential(credential).await()
+            
+            // Check if user exists in Firestore, if not create them
+            val userDoc = db.collection("users").document(result.user!!.uid).get().await()
+            if (!userDoc.exists()) {
+                db.collection("users").document(result.user!!.uid).set(
+                    mapOf(
+                        "email" to (result.user!!.email ?: ""),
+                        "groups" to emptyList<String>(),
+                        "isBanned" to false
+                    )
+                ).await()
+            }
+            Result.success(result)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun signOut() {
         auth.signOut()
     }

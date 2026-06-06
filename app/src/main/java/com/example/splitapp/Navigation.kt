@@ -26,19 +26,21 @@ fun MainNavigation() {
   var isUserBanned by remember { mutableStateOf(false) }
   val currentUser = firebaseService.currentUser
 
-  LaunchedEffect(currentUser) {
+  DisposableEffect(currentUser) {
+    var listener: com.google.firebase.firestore.ListenerRegistration? = null
     if (currentUser != null) {
-      val listener = FirebaseFirestore.getInstance()
+      listener = FirebaseFirestore.getInstance()
         .collection("users").document(currentUser.uid)
         .addSnapshotListener { snapshot, _ ->
           if (snapshot != null && snapshot.exists()) {
             isUserBanned = snapshot.getBoolean("isBanned") ?: false
           }
         }
-      // Clean up listener when user signs out or scope closes
-      return@LaunchedEffect
     } else {
       isUserBanned = false
+    }
+    onDispose {
+      listener?.remove()
     }
   }
 

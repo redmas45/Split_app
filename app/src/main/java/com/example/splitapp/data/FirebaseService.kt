@@ -181,7 +181,8 @@ class FirebaseService {
 
                 // Fetch details for each group
                 // Note: Firestore 'in' query supports up to 30 items
-                db.collection("groups").whereIn("id", groupIds)
+                val safeGroupIds = groupIds.take(30)
+                db.collection("groups").whereIn("id", safeGroupIds)
                     .addSnapshotListener { groupsSnapshot, groupsError ->
                         if (groupsError != null) {
                             trySend(emptyList())

@@ -44,6 +44,22 @@ class FirebaseService {
     suspend fun signIn(email: String, password: String): Result<com.google.firebase.auth.AuthResult> {
         return try {
             val result = auth.signInWithEmailAndPassword(email, password).await()
+            
+            // Ensure user document exists (important for manually created accounts like Super Admin)
+            val user = result.user
+            if (user != null) {
+                val userDoc = db.collection("users").document(user.uid).get().await()
+                if (!userDoc.exists()) {
+                    db.collection("users").document(user.uid).set(
+                        mapOf(
+                            "email" to (user.email ?: email),
+                            "groups" to emptyList<String>(),
+                            "isBanned" to false
+                        )
+                    ).await()
+                }
+            }
+            
             Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
@@ -95,7 +111,11 @@ class FirebaseService {
 
             db.runBatch { batch ->
                 batch.set(groupRef, groupData)
-                batch.update(db.collection("users").document(userId), "groups", FieldValue.arrayUnion(groupId))
+                batch.set(
+                    db.collection("users").document(userId),
+                    mapOf("groups" to FieldValue.arrayUnion(groupId)),
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
             }.await()
 
             Result.success(groupId)
@@ -124,7 +144,11 @@ class FirebaseService {
 
             db.runBatch { batch ->
                 batch.update(groupRef, "members", FieldValue.arrayUnion(newMember))
-                batch.update(db.collection("users").document(userId), "groups", FieldValue.arrayUnion(groupId))
+                batch.set(
+                    db.collection("users").document(userId),
+                    mapOf("groups" to FieldValue.arrayUnion(groupId)),
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
             }.await()
 
             Result.success(Unit)

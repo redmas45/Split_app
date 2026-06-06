@@ -1,7 +1,7 @@
 <h1 align="center">Expense Splitter 💸</h1>
 
 <p align="center">
-  A sleek, modern Android application built to simplify group expenses. Instantly calculate equal splits or settle up complex debts with minimal transactions.
+  A sleek, modern Android application built to simplify group expenses. Features an itemized ledger system to track both group expenses and direct peer-to-peer transfers, automatically calculating the minimal transactions needed to settle up.
 </p>
 
 <p align="center">
@@ -20,10 +20,11 @@
 
 ## 🌟 Features
 
-- **Dynamic Member List:** Easily add up to 5 people and log their individual payments.
-- **Split Equally Mode:** Automatically calculates the total expenditure, average share, and highlights who overpaid or owes money.
-- **Settle Debts Mode:** Utilizes a greedy algorithm to determine the absolute minimal number of direct transactions required to square up everyone.
-- **Modern UI/UX:** Built entirely with Jetpack Compose using Material Design 3 guidelines for a crisp, responsive, and intuitive user interface.
+- **Itemized Ledger System:** Record specific expenses (e.g. "Movie Tickets") and specify who paid for them.
+- **Peer-to-Peer Transfers:** Log direct cash advances or payments from one person to another (e.g. "Person A gave Person B an advance of ₹1500").
+- **Smart Settlements:** Automatically calculates the total group expenditure, balances out all expenses and transfers, and utilizes a greedy algorithm to output the absolute minimal number of direct transactions required to square up everyone.
+- **Dynamic Members:** Easily add and manage group members dynamically.
+- **Premium Material 3 UI:** Features a gorgeous, card-based interface with sliding filter chips, bottom sheet dialogs, and a clean three-tab navigation layout built entirely in Jetpack Compose.
 
 ## 📸 Screenshots
 

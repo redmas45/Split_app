@@ -6,6 +6,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.example.splitapp.data.FirebaseService
+import com.example.splitapp.ui.admin.AdminPanelScreen
 import com.example.splitapp.ui.group.GroupSelectionScreen
 import com.example.splitapp.ui.login.LoginScreen
 import com.example.splitapp.ui.main.MainScreen
@@ -43,6 +44,9 @@ fun MainNavigation() {
             onSignOut = {
               backStack.add(Login)
               backStack.remove(GroupSelection)
+            },
+            onAdminClick = {
+              backStack.add(AdminPanel)
             }
           )
         }
@@ -50,6 +54,14 @@ fun MainNavigation() {
           MainScreen(
             groupId = key.groupId,
             groupName = key.groupName,
+            firebaseService = firebaseService,
+            onBackClick = {
+              backStack.removeLastOrNull()
+            }
+          )
+        }
+        entry<AdminPanel> {
+          AdminPanelScreen(
             firebaseService = firebaseService,
             onBackClick = {
               backStack.removeLastOrNull()

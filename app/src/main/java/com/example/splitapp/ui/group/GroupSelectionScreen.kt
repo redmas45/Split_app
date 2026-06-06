@@ -1,6 +1,8 @@
 package com.example.splitapp.ui.group
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +28,7 @@ fun GroupSelectionScreen(
     firebaseService: FirebaseService,
     onGroupSelected: (groupId: String, groupName: String) -> Unit,
     onSignOut: () -> Unit,
+    onAdminClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -46,20 +49,39 @@ fun GroupSelectionScreen(
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
             Color(0xFF0F2027),
-            Color(0xFF203A43)
+            Color(0xFF203A43),
+            Color(0xFF2C5364)
         )
     )
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Groups", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = { 
+                    Text(
+                        "SplitShare Hub", 
+                        fontWeight = FontWeight.Bold, 
+                        color = Color.White,
+                        fontSize = 20.sp
+                    ) 
+                },
                 actions = {
-                    TextButton(onClick = {
-                        firebaseService.signOut()
-                        onSignOut()
-                    }) {
-                        Text("Sign Out", color = Color.White, fontWeight = FontWeight.Bold)
+                    if (firebaseService.isAdmin()) {
+                        TextButton(
+                            onClick = onAdminClick,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFD700)) // Gold accent for admin
+                        ) {
+                            Text("Admin 🔑", fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            firebaseService.signOut()
+                            onSignOut()
+                        }
+                    ) {
+                        Text("🚪", fontSize = 20.sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -72,14 +94,13 @@ fun GroupSelectionScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFFF7F9FC))
+                .background(gradientBrush)
         ) {
             val groups = groupsState.value
 
             if (groups == null) {
-                // Loading state
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF203A43))
+                    CircularProgressIndicator(color = Color.White)
                 }
             } else {
                 Column(
@@ -87,34 +108,54 @@ fun GroupSelectionScreen(
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
-                    // Welcome header card
+                    // Header welcome widget (glassmorphic style card)
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 20.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFF203A43))
+                            .padding(bottom = 16.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Color.White.copy(alpha = 0.12f)
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp)
                     ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Text(
-                                text = "Welcome to SplitShare!",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = firebaseService.currentUser?.email ?: "User",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
+                        Row(
+                            modifier = Modifier.padding(20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Hello there! 👋",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = firebaseService.currentUser?.email ?: "User",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            // Stats bubble
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("Groups", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                                Text("${groups.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
                         }
                     }
 
+                    // Large Premium Action Buttons
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp),
+                            .padding(bottom = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
@@ -122,38 +163,58 @@ fun GroupSelectionScreen(
                                 errorMessage = null
                                 showCreateDialog = true 
                             },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C5364))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF00B4DB),
+                                contentColor = Color.White
+                            )
                         ) {
-                            Text("Create Group", fontWeight = FontWeight.Bold)
+                            Text("Create Group ➕", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                         Button(
                             onClick = { 
                                 errorMessage = null
                                 showJoinDialog = true 
                             },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF203A43))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF00F2FE),
+                                contentColor = Color(0xFF0F2027)
+                            )
                         ) {
-                            Text("Join Group", fontWeight = FontWeight.Bold)
+                            Text("Join Group 🤝", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
 
+                    Text(
+                        text = "My Ledger Rooms",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
                     if (groups.isEmpty()) {
-                        // Empty state
                         Box(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("📁", fontSize = 64.sp)
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("💸", fontSize = 64.sp)
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "No groups found.\nCreate or join a group to start splitting expenses!",
+                                    text = "No active groups yet.\nClick Create or Join above to begin!",
                                     textAlign = TextAlign.Center,
-                                    color = Color.Gray,
+                                    color = Color.White.copy(alpha = 0.7f),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                             }
@@ -161,7 +222,7 @@ fun GroupSelectionScreen(
                     } else {
                         LazyColumn(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(groups) { group ->
                                 val id = group["id"] as? String ?: ""
@@ -173,33 +234,47 @@ fun GroupSelectionScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onGroupSelected(id, name) },
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = CardDefaults.elevatedCardColors(
+                                        containerColor = Color.White.copy(alpha = 0.95f)
+                                    ),
+                                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(16.dp),
+                                        modifier = Modifier.padding(20.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = name,
-                                                style = MaterialTheme.typography.titleMedium,
+                                                style = MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF0F2027)
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("👥 ${membersList.size} members") },
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("📄 ${txList.size} txs") },
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                            }
                                             Text(
-                                                text = "Members: ${membersList.size} | Transactions: ${txList.size}",
+                                                text = "Group Code: $id",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = Color.Gray
-                                            )
-                                            Text(
-                                                text = "ID: $id",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color.LightGray
+                                                color = Color.Gray,
+                                                modifier = Modifier.padding(top = 4.dp)
                                             )
                                         }
-                                        Text("➡️", fontSize = 20.sp)
+                                        Text("➡️", fontSize = 24.sp, color = Color(0xFF203A43))
                                     }
                                 }
                             }
@@ -214,22 +289,24 @@ fun GroupSelectionScreen(
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { if (!actionLoading) showCreateDialog = false },
-            title = { Text("Create Group", fontWeight = FontWeight.Bold) },
+            title = { Text("Create New Group", fontWeight = FontWeight.Bold, color = Color(0xFF0F2027)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
-                        label = { Text("Group Name") },
+                        label = { Text("Group Name (e.g. Goa Trip)") },
                         singleLine = true,
-                        enabled = !actionLoading
+                        enabled = !actionLoading,
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedTextField(
                         value = creatorNameInput,
                         onValueChange = { creatorNameInput = it },
-                        label = { Text("Your Nickname") },
+                        label = { Text("Your Nickname (e.g. Raj)") },
                         singleLine = true,
-                        enabled = !actionLoading
+                        enabled = !actionLoading,
+                        shape = RoundedCornerShape(12.dp)
                     )
                     AnimatedVisibility(visible = errorMessage != null) {
                         errorMessage?.let { error ->
@@ -261,7 +338,8 @@ fun GroupSelectionScreen(
                             }
                         }
                     },
-                    enabled = !actionLoading
+                    enabled = !actionLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF203A43))
                 ) {
                     if (actionLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
@@ -282,22 +360,24 @@ fun GroupSelectionScreen(
     if (showJoinDialog) {
         AlertDialog(
             onDismissRequest = { if (!actionLoading) showJoinDialog = false },
-            title = { Text("Join Group", fontWeight = FontWeight.Bold) },
+            title = { Text("Join Existing Group", fontWeight = FontWeight.Bold, color = Color(0xFF0F2027)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = joinGroupIdInput,
                         onValueChange = { joinGroupIdInput = it },
-                        label = { Text("Group ID/Code") },
+                        label = { Text("Group Code (e.g. 5xJ1...)") },
                         singleLine = true,
-                        enabled = !actionLoading
+                        enabled = !actionLoading,
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedTextField(
                         value = joinNameInput,
                         onValueChange = { joinNameInput = it },
-                        label = { Text("Your Nickname") },
+                        label = { Text("Your Nickname (e.g. Sam)") },
                         singleLine = true,
-                        enabled = !actionLoading
+                        enabled = !actionLoading,
+                        shape = RoundedCornerShape(12.dp)
                     )
                     AnimatedVisibility(visible = errorMessage != null) {
                         errorMessage?.let { error ->
@@ -328,7 +408,8 @@ fun GroupSelectionScreen(
                             }
                         }
                     },
-                    enabled = !actionLoading
+                    enabled = !actionLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF203A43))
                 ) {
                     if (actionLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)

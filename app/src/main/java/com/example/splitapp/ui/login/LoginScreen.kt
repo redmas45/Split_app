@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,12 +38,20 @@ fun LoginScreen(
     
     val coroutineScope = rememberCoroutineScope()
 
-    // Premium Gradient background
+    // Vibrant futuristic gradient background
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF0F2027),
-            Color(0xFF203A43),
-            Color(0xFF2C5364)
+            Color(0xFF0B0D17),
+            Color(0xFF14192D),
+            Color(0xFF1E2640)
+        )
+    )
+
+    // Cyan-Blue premium gradient button brush
+    val buttonGradient = Brush.horizontalGradient(
+        colors = listOf(
+            Color(0xFF00B4DB),
+            Color(0xFF00F2FE)
         )
     )
 
@@ -57,65 +67,86 @@ fun LoginScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Branding Icon / Text
+            // Header Section
             Text(
                 text = "💸",
-                fontSize = 64.sp,
+                fontSize = 72.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
             Text(
                 text = "SplitShare",
-                style = MaterialTheme.typography.headlineLarge,
+                fontSize = 36.sp,
                 color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                letterSpacing = 1.sp
             )
             
             Text(
-                text = "Effortless group expense splitting",
+                text = "Track expenses & settle up dynamically",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 32.dp),
+                color = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.padding(bottom = 36.dp),
                 textAlign = TextAlign.Center
             )
 
-            // Auth Card
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = Color.White.copy(alpha = 0.95f)
-                ),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 16.dp)
+            // Glassmorphism Card Wrapper
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.15f),
+                                Color.White.copy(alpha = 0.02f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(28.dp)
+                    )
+                    .background(
+                        color = Color.White.copy(alpha = 0.06f),
+                        shape = RoundedCornerShape(28.dp)
+                    )
+                    .padding(28.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = if (isSignUp) "Create Account" else "Welcome Back",
-                        style = MaterialTheme.typography.titleLarge,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F2027)
+                        color = Color.White
                     )
                     
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
+                    // Email Input
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
                         label = { Text("Email Address") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White.copy(alpha = 0.9f),
+                            focusedBorderColor = Color(0xFF00B4DB),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedLabelColor = Color(0xFF00B4DB),
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color(0xFF00B4DB)
+                        ),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
+                    // Password Input
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -123,8 +154,17 @@ fun LoginScreen(
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White.copy(alpha = 0.9f),
+                            focusedBorderColor = Color(0xFF00B4DB),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedLabelColor = Color(0xFF00B4DB),
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.5f),
+                            cursorColor = Color(0xFF00B4DB)
+                        ),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp)
                     )
 
                     AnimatedVisibility(
@@ -135,7 +175,7 @@ fun LoginScreen(
                         errorMessage?.let { error ->
                             Text(
                                 text = error,
-                                color = MaterialTheme.colorScheme.error,
+                                color = Color(0xFFFF4B4B),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 12.dp),
                                 textAlign = TextAlign.Center
@@ -143,57 +183,64 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(28.dp))
 
-                    Button(
-                        onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMessage = "Please fill in all fields"
-                                return@Button
-                            }
-                            if (password.length < 6) {
-                                errorMessage = "Password must be at least 6 characters"
-                                return@Button
-                            }
-                            errorMessage = null
-                            isLoading = true
-                            coroutineScope.launch {
-                                val result = if (isSignUp) {
-                                    firebaseService.signUp(email.trim(), password)
-                                } else {
-                                    firebaseService.signIn(email.trim(), password)
-                                }
-                                isLoading = false
-                                if (result.isSuccess) {
-                                    onLoginSuccess()
-                                } else {
-                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Authentication failed"
-                                }
-                            }
-                        },
+                    // Submit Button with Gradient
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF203A43),
-                            contentColor = Color.White
-                        ),
-                        enabled = !isLoading
+                            .height(52.dp)
+                            .background(
+                                brush = buttonGradient,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable(enabled = !isLoading) {
+                                if (email.isBlank() || password.isBlank()) {
+                                    errorMessage = "Please fill in all fields"
+                                    return@clickable
+                                }
+                                if (password.length < 6) {
+                                    errorMessage = "Password must be at least 6 characters"
+                                    return@clickable
+                                }
+                                errorMessage = null
+                                isLoading = true
+                                coroutineScope.launch {
+                                    val result = if (isSignUp) {
+                                        firebaseService.signUp(email.trim(), password)
+                                    } else {
+                                        firebaseService.signIn(email.trim(), password)
+                                    }
+                                    isLoading = false
+                                    if (result.isSuccess) {
+                                        onLoginSuccess()
+                                    } else {
+                                        errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Authentication failed"
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = Color.White,
+                                color = Color(0xFF0B0D17),
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text(if (isSignUp) "Sign Up" else "Log In", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isSignUp) "GET STARTED" else "LOG IN",
+                                color = Color(0xFF0B0D17),
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                fontSize = 15.sp
+                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
+                    // Auth State Switcher Text
                     TextButton(
                         onClick = {
                             isSignUp = !isSignUp
@@ -201,9 +248,10 @@ fun LoginScreen(
                         }
                     ) {
                         Text(
-                            text = if (isSignUp) "Already have an account? Log In" else "New to SplitShare? Sign Up",
-                            color = Color(0xFF2C5364),
-                            fontWeight = FontWeight.SemiBold
+                            text = if (isSignUp) "Already have an account? Log In" else "New to SplitShare? Create Account",
+                            color = Color(0xFF00F2FE),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
                         )
                     }
                 }

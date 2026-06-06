@@ -180,4 +180,38 @@ class FirebaseService {
             Result.failure(e)
         }
     }
+
+    fun isAdmin(): Boolean = auth.currentUser?.email == ADMIN_EMAIL
+
+    fun getAllUsers(): Flow<List<Map<String, Any>>> = callbackFlow {
+        val listener = db.collection("users")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.plus("uid" to doc.id)
+                } ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun getAllGroups(): Flow<List<Map<String, Any>>> = callbackFlow {
+        val listener = db.collection("groups")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.plus("id" to doc.id)
+                } ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { listener.remove() }
+    }
 }
+
+const val ADMIN_EMAIL = "kalimateym2@gmail.com"

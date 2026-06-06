@@ -260,7 +260,8 @@ fun LoginScreen(
                             coroutineScope.launch {
                                 try {
                                     val credentialManager = CredentialManager.create(context)
-                                    val webClientId = context.getString(R.string.default_web_client_id)
+                                    // Make sure to replace this with your actual Web Client ID from Firebase Console
+                                    val webClientId = "658669374197-i2f0d12eshrk5j9e7s0240ac9q3lb06t.apps.googleusercontent.com" 
                                     
                                     val googleIdOption = GetGoogleIdOption.Builder()
                                         .setFilterByAuthorizedAccounts(false)

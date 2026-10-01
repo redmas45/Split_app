@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// SplitShare Firestore rules. NOT DEPLOYED BY THE ASSISTANT: review them, test them in the Firebase console's
-// Rules Playground, and deploy only after EVERY user has installed an app version that reads groups one document at a
-// time (Phase 5 or later). Older installs run a `whereIn` query on `groups`, which these rules deny to normal users.
+// SplitShare Firestore rules. Deploy by pasting into Firebase console > Firestore Database > Rules > Publish.
+// Requires app v1.0.0 or later on every phone: older installs run a `whereIn` query on `groups`, which these rules
+// deny to normal users.
 //
 // The Firebase API key in google-services.json is public by design; these rules are the app's real protection.
 
@@ -15,14 +15,12 @@ service cloud.firestore {
     // Path of a user's profile document.
     function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
 
-    // The Super Admin (ADMIN_EMAIL in FirebaseService.kt). The app's own isAdmin() only hides a button; this is the real check.
-    // CAUTION: email_verified must be true. If the admin account was created with email + password and its address was
-    // never verified, the admin is locked out: verify that email first (or move to a custom claim `admin: true`, set
-    // with the Admin SDK, which is the better long-term fix).
+    // The Super Admin (the account behind ADMIN_EMAIL in FirebaseService.kt). The app's own isAdmin() only hides a button;
+    // this is the real check. Matched by account uid, not email: the uid is fixed at account creation and can't be
+    // spoofed, and the admin's email is not verified, so an email_verified check would lock the admin out.
+    // If the admin account is ever re-created, update this uid.
     function isAdmin() {
-      return signedIn()
-        && request.auth.token.email == "kalimateym2@gmail.com"
-        && request.auth.token.email_verified == true;
+      return signedIn() && request.auth.uid == "tTySfboEGScBbRiHb3nwfQeoQdC2";
     }
 
     // True unless the caller's profile says isBanned == true (a missing profile counts as not banned).

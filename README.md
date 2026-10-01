@@ -18,17 +18,27 @@
 
 ---
 
+## 📲 Install
+
+1. Open the [latest release](https://github.com/redmas45/Split_app/releases/latest) on your phone and download `app-release.apk`.
+2. Install it (allow installs from your browser if Android asks) and log in.
+
+Updates install over the existing app. Your groups and balances live in the cloud, so reinstalling never loses data.
+
+> **Coming from a build older than v1.0.0?** Uninstall the old app once first: it was signed with a different key. Then install v1.0.0 and log in as usual.
+
 ## 🌟 Features
 
-- **Accounts:** sign in with email and password, or with Google, through Firebase Authentication. Password reset by email is built in.
-- **Real-time sync:** expenses, members and transfers sync instantly through Cloud Firestore. Every edit is applied as one safe change, so two people adding expenses at the same moment never overwrite each other.
-- **Create and join groups:** share a group code (or use the Share button) to invite people. When you join, say which existing member you are, or join as a new member, so nobody is listed twice and newcomers never owe for expenses from before they joined.
-- **Itemized ledger:** record expenses and choose who paid and who the expense is split between. Every row shows who added it and when.
-- **Transfers:** log money one person gave another directly.
-- **Exact money math:** all amounts are handled in whole paise, never floating point, so shares always add up to the total. When an amount doesn't divide evenly, the extra paise are spread fairly.
-- **Settle up:** the Summary tab shows each person's balance and a short list of payments that settles the group. It is a greedy method that gives a small number of payments, not always the absolute minimum.
-- **Safe to use:** deleting a transaction or removing a member always asks first, and a member with transactions can't be removed.
-- **Light and dark mode** in one consistent brand theme.
+- **Accounts:** email and password or Google sign-in (Firebase Authentication), with "Forgot password?" by email and plain-language error messages.
+- **Groups:** create a group, invite people with its code or the **Share** button, and leave a group any time. When you join, you pick which existing member you are, or join as someone new, so nobody is listed twice and you can't join the same group twice. Creating a group while offline syncs when you're back online.
+- **Itemized ledger:** record expenses (who paid, and who it's split between, everyone by default) and transfers (money one person gave another). Newest entries first, each with its date and who added it. Category icons are picked from the description.
+- **Exact money math:** every amount is handled in whole paise, never floating point, so shares always add up to the total. People who join later never owe for expenses from before they joined.
+- **Settle up:** the Summary tab shows each person's balance and a short list of payments that settles the group (a greedy method: a small number of payments, not always the absolute minimum).
+- **Safe by design:** deleting a transaction, removing a member, leaving a group and signing out always ask first. A member who has transactions can't be removed. Two people editing at the same moment never overwrite each other.
+- **Real-time sync** through Cloud Firestore, with one live connection per group.
+- **Notifications** when *someone else* adds an expense while the app is open. Permission is asked, with an explanation, the first time you create or join a group.
+- **Admin panel** for the Super Admin: all users and groups, totals, read-only ledgers with names, ban/unban and delete group, each with a confirmation. Banned users are blocked immediately and can't get back in with the Back button.
+- **Light and dark mode** in one consistent brand theme, with labelled icons for screen readers.
 
 ## 📸 Screenshots
 
@@ -40,9 +50,18 @@ Screenshots are not included yet.
 - **UI:** [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material Design 3
 - **Navigation:** Navigation 3
 - **Backend:** Firebase Authentication and Cloud Firestore
-- **Build:** Gradle (Kotlin DSL)
+- **Build:** Gradle (Kotlin DSL), GitHub Actions
 
-## 🚀 Getting started
+### Project layout
+
+| Folder (`app/src/main/java/com/example/splitapp/`) | What's in it |
+|---|---|
+| `domain/` | Pure logic with no Android or Firebase code: money parsing and formatting, balances, settle-up, join and edit decisions, form validation |
+| `data/` | Firebase access (`FirebaseService`), notifications, auth error messages |
+| `ui/` | Compose screens: login, group list, group (Members / Ledger / Summary), admin, shared confirmation dialog |
+| `theme/` | Brand colours, light and dark schemes, typography |
+
+## 🚀 Getting started (developers)
 
 ### Prerequisites
 - Android Studio (current stable release recommended)
@@ -57,30 +76,62 @@ Screenshots are not included yet.
 2. Open the project in **Android Studio** and let Gradle sync.
 3. Run the app on an emulator or a physical device.
 
-### Building from the command line
+### Building and testing from the command line
 ```bash
 ./gradlew assembleDebug        # debug APK: app/build/outputs/apk/debug/app-debug.apk
-./gradlew testDebugUnitTest    # unit tests
+./gradlew testDebugUnitTest    # 161 unit tests (money math, balances, join/edit rules, validation…)
 ./gradlew lintDebug            # lint
 ```
-Instrumented (on-device) tests need an emulator or phone:
+Instrumented (on-device) UI tests need an emulator or phone:
 ```bash
-./gradlew connectedDebugAndroidTest
+./gradlew connectedDebugAndroidTest   # 22 UI tests (delete confirmation, join dialog, login, admin)
 ```
+
+### Data compatibility
+
+Phones running older versions read the same Firestore documents, so data changes are **additive only**: never change an existing field's type (`amount` stays a text value such as `"1500.00"`), and new code must still read old documents that lack the newer fields (`splitBetween`, `createdAt`, `createdBy`, member `uid`, `creatorUid`).
 
 ## 🔒 Firestore security rules
 
-The app's real protection is its Firestore rules, kept in [`firestore.rules`](firestore.rules) (with [`firebase.json`](firebase.json)) so they can be reviewed. **Don't deploy them until every user has installed an app version that reads groups one at a time** (older versions run a query the rules deny). Test them in the Firebase console's Rules Playground first. Note the admin check requires the admin account's email to be verified.
+The app's real protection is its Firestore rules, kept in [`firestore.rules`](firestore.rules) (with [`firebase.json`](firebase.json)) and **deployed**. In short:
+
+- Only a group's members can change it; anyone signed in and not banned can open a group by its code (the code works as an invitation).
+- Users can read and edit only their own profile, and can never change their own ban status.
+- Banned users can't open or edit groups.
+- Only the Super Admin can list all users and groups, ban users and delete groups. The admin is matched by **account uid**, not email. If the admin account is ever re-created, update the uid in `firestore.rules`.
+
+To change the rules: edit `firestore.rules`, test it against every app action in the Firestore emulator, then paste it into **Firebase console → Firestore Database → Rules → Publish**. The console keeps a history of published versions, so you can roll back.
 
 ## 📦 Releasing
 
-CI runs on every push and pull request (unit tests, lint, debug build). A release is built and published only when you push a version tag:
+CI runs on every push to `main` and every pull request (unit tests, lint, debug build) and publishes nothing. A release is built only when you push a version tag:
 
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.0.1 && git push origin v1.0.1
 ```
 
-The release job signs the APK with a key you keep out of the repo. Add these **GitHub Secrets** first: `KEYSTORE_BASE64` (your `.jks` file, base64-encoded), `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. Create the key once with `keytool -genkeypair -v -keystore splitshare-release.jks -alias splitshare -keyalg RSA -keysize 2048 -validity 10000`, and register its SHA-1 and SHA-256 fingerprints in the Firebase console (needed for Google sign-in).
+The release job signs the APK and publishes it as the latest release, which is what the **Download APK** button links to. It needs four **Repository secrets** (Settings → Secrets and variables → Actions → *Secrets* tab → *Repository secrets*, not Environments or Variables):
+
+| Secret | Value |
+|---|---|
+| `KEYSTORE_BASE64` | the release `.jks` file, base64-encoded |
+| `KEYSTORE_PASSWORD` | keystore password |
+| `KEY_ALIAS` | key alias |
+| `KEY_PASSWORD` | key password |
+
+The signing key's SHA-1 and SHA-256 fingerprints must be registered in the Firebase console for Google sign-in to work. **Keep the `.jks` file and its passwords backed up outside the repo:** every future update must be signed with the same key, or users would have to uninstall to update. The version code increases automatically with each build.
+
+## 📝 What's new in v1.0.0
+
+- Exact money math; newcomers no longer owe for older expenses; choose who an expense is split between.
+- "Are you sure?" before deleting a transaction, removing a member, leaving a group or signing out.
+- Two-step join with no duplicate members, leave group, share code, offline-safe group creation.
+- Ledger shows newest first with dates and authors; the Summary tab scrolls; clearer add-expense form.
+- Scrollable login, password reset, readable errors.
+- Admin: confirmations, names instead of ids, exact totals, no broken "Delete User".
+- Bans can't be bypassed; security rules deployed on the server.
+- One brand theme with working dark mode, real icons, new app icon and the SplitShare name.
+- No more connection leaks; no 30-group limit; signed releases.
 
 ## 🤝 Contributing
 

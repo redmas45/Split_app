@@ -44,3 +44,7 @@ REVIEW_FIX_PROMPT.md
 
 # ---- Claude Code per-user settings ----
 .claude/settings.local.json
+
+# ---- Service-account keys (never commit) ----
+*firebase-adminsdk*.json
+serviceAccount*.json

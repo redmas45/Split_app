@@ -12,7 +12,20 @@
           "package_name": "com.example.splitapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "658669374197-sp85sor9441dumlppe3f0fie4po3pf5t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.splitapp",
+            "certificate_hash": "83bf7a587c99a12f25fb5f5973deeaf94b4ee086"
+          }
+        },
+        {
+          "client_id": "658669374197-i2f0d12eshrk5j9e7s0240ac9q3lb06t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBWZMHAadrdxmV9LvN3JrXAZzhNIGRLXqw"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "658669374197-i2f0d12eshrk5j9e7s0240ac9q3lb06t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

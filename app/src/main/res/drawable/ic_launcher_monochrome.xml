@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Single-colour version for Android 13+ themed icons (the system tints it). Same shapes; the coin is punched out of
+         the note with the rupee sign in the hole, and the wings are detached from the note: with only one colour a gap
+         is what keeps them readable as wings instead of a blob. -->
+    <group android:pivotX="54" android:pivotY="54" android:rotation="-12">
+        <group android:pivotX="54" android:pivotY="54" android:scaleX="-1">
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="14"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h6.8 a2.2,2.2 0 0 1 0,4.4 h-6.8 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-8"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h9.3 a2.2,2.2 0 0 1 0,4.4 h-9.3 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-30"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h9.8 a2.2,2.2 0 0 1 0,4.4 h-9.8 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-52"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h7.8 a2.2,2.2 0 0 1 0,4.4 h-7.8 z" /></group>
+        </group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="14"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h6.8 a2.2,2.2 0 0 1 0,4.4 h-6.8 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-8"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h9.3 a2.2,2.2 0 0 1 0,4.4 h-9.3 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-30"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h9.8 a2.2,2.2 0 0 1 0,4.4 h-9.8 z" /></group>
+            <group android:pivotX="77.5" android:pivotY="52" android:rotation="-52"><path android:fillColor="#FF000000" android:pathData="M77.5,52 m0,-2.2 h7.8 a2.2,2.2 0 0 1 0,4.4 h-7.8 z" /></group>
+        <path android:fillColor="#FF000000" android:fillType="evenOdd"
+            android:pathData="M37,41 h34 a3.5,3.5 0 0 1 3.5,3.5 v19 a3.5,3.5 0 0 1 -3.5,3.5 h-34 a3.5,3.5 0 0 1 -3.5,-3.5 v-19 a3.5,3.5 0 0 1 3.5,-3.5 z M54,46.2 a7.8,7.8 0 1 0 0,15.6 a7.8,7.8 0 1 0 0,-15.6 z" />
+        <path android:pathData="M50.6,49.7 H57.4 M50.6,52.3 H57.4 M51.2,49.7 H54.5 A2.7,2.7 0 0 1 54.5,55.1 H51.2 L56.4,60" android:strokeColor="#FF000000" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>

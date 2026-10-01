@@ -1,50 +1,55 @@
 package com.example.splitapp.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+private val LightColorScheme = lightColorScheme(
+  primary = LightPrimary, onPrimary = LightOnPrimary,
+  primaryContainer = LightPrimaryContainer, onPrimaryContainer = LightOnPrimaryContainer,
+  secondary = LightSecondary, onSecondary = Color.White,
+  secondaryContainer = LightSecondaryContainer, onSecondaryContainer = LightOnSecondaryContainer,
+  tertiary = LightTertiary, onTertiary = Color.White,
+  tertiaryContainer = LightTertiaryContainer, onTertiaryContainer = LightOnTertiaryContainer,
+  error = LightError, onError = Color.White,
+  errorContainer = LightErrorContainer, onErrorContainer = LightOnErrorContainer,
+  background = LightBackground, onBackground = LightOnSurface,
+  surface = LightSurface, onSurface = LightOnSurface,
+  surfaceVariant = LightSurfaceVariant, onSurfaceVariant = LightOnSurfaceVariant,
+  outline = LightOutline, outlineVariant = LightOutlineVariant,
+  // The tonal surfaces dialogs, sheets and menus use: brand-neutral instead of the default lavender tint.
+  surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF1F5F7), surfaceContainer = Color(0xFFEBF0F3),
+  surfaceContainerHigh = Color(0xFFE5ECEF), surfaceContainerHighest = Color(0xFFDFE7EB),
+)
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
+private val DarkColorScheme = darkColorScheme(
+  primary = DarkPrimary, onPrimary = DarkOnPrimary,
+  primaryContainer = DarkPrimaryContainer, onPrimaryContainer = DarkOnPrimaryContainer,
+  secondary = DarkSecondary, onSecondary = Color(0xFF00363F),
+  secondaryContainer = DarkSecondaryContainer, onSecondaryContainer = DarkOnSecondaryContainer,
+  tertiary = DarkTertiary, onTertiary = Color(0xFF0A2E10),
+  tertiaryContainer = DarkTertiaryContainer, onTertiaryContainer = DarkOnTertiaryContainer,
+  error = DarkError, onError = Color(0xFF3B0A0A),
+  errorContainer = DarkErrorContainer, onErrorContainer = DarkOnErrorContainer,
+  background = DarkBackground, onBackground = DarkOnSurface,
+  surface = DarkSurface, onSurface = DarkOnSurface,
+  surfaceVariant = DarkSurfaceVariant, onSurfaceVariant = DarkOnSurfaceVariant,
+  outline = DarkOutline, outlineVariant = DarkOutlineVariant,
+  surfaceContainerLowest = Color(0xFF0B181D), surfaceContainerLow = Color(0xFF152830), surfaceContainer = DarkSurface,
+  surfaceContainerHigh = Color(0xFF213A44), surfaceContainerHighest = Color(0xFF28444F),
+)
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-  )
-
+/**
+ * One brand theme, light and dark. No dynamic (wallpaper) colour: it made the top bars purple or green next to the
+ * fixed brand teal, so the app looked like three different apps.
+ */
 @Composable
 fun SplitAppTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
-
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  MaterialTheme(colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme, typography = Typography, content = content)
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand ink (matches BrandInk900 in theme/Color.kt). Used as the window background so the first frame at launch
+         is the brand colour instead of a white flash, in light and dark mode. -->
+    <color name="brand_ink">#FF0F2027</color>
+</resources>

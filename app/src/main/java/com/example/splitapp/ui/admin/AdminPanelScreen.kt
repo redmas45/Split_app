@@ -1,26 +1,31 @@
-package com.example.splitapp.ui.admin
+﻿package com.example.splitapp.ui.admin
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.splitapp.data.FirebaseService
-import kotlinx.coroutines.flow.map
+import com.example.splitapp.domain.adminLedgerLine
+import com.example.splitapp.domain.adminMetrics
+import com.example.splitapp.domain.formatRupees
+import com.example.splitapp.ui.common.ConfirmDialog
 import kotlinx.coroutines.launch
 
-@Suppress("UNCHECKED_CAST", "DEPRECATION")
+@Suppress("UNCHECKED_CAST")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminPanelScreen(
@@ -28,22 +33,26 @@ fun AdminPanelScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val usersState = firebaseService.getAllUsers().collectAsState(initial = null)
-    val groupsState = firebaseService.getAllGroups().collectAsState(initial = null)
+    // remember: otherwise every redraw (e.g. each letter typed in a search box) re-attaches both Firestore listeners.
+    val usersState = remember { firebaseService.getAllUsers() }.collectAsState(initial = null)
+    val groupsState = remember { firebaseService.getAllGroups() }.collectAsState(initial = null)
 
     var userSearchQuery by remember { mutableStateOf("") }
     var groupSearchQuery by remember { mutableStateOf("") }
-    
-    var selectedGroupTransactions by remember { mutableStateOf<List<Map<String, Any>>?>(null) }
-    var selectedGroupName by remember { mutableStateOf("") }
+
+    var selectedGroup by remember { mutableStateOf<Map<String, Any>?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Admin Dashboard", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Text("⬅️", fontSize = 20.sp)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -57,7 +66,7 @@ fun AdminPanelScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFFF7F9FC))
+                .background(MaterialTheme.colorScheme.background)
         ) {
             val users = usersState.value
             val groups = groupsState.value
@@ -67,21 +76,8 @@ fun AdminPanelScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
-                // Calculate metrics
-                val totalUsers = users.size
-                val totalGroups = groups.size
-                
-                var totalTransactionsCount = 0
-                var totalVolume = 0.0
-
-                groups.forEach { group ->
-                    val txList = group["transactions"] as? List<Map<String, Any>> ?: emptyList()
-                    totalTransactionsCount += txList.size
-                    txList.forEach { tx ->
-                        val amount = (tx["amount"] as? String)?.toDoubleOrNull() ?: 0.0
-                        totalVolume += amount
-                    }
-                }
+                // Only recomputed when the data changes, not on every keystroke in the search boxes.
+                val metrics = remember(groups) { adminMetrics(groups) }
 
                 Column(
                     modifier = Modifier
@@ -93,15 +89,16 @@ fun AdminPanelScreen(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        MetricCard(title = "Total Users", value = totalUsers.toString(), modifier = Modifier.weight(1f))
-                        MetricCard(title = "Total Groups", value = totalGroups.toString(), modifier = Modifier.weight(1f))
+                        MetricCard(title = "Total Users", value = users.size.toString(), modifier = Modifier.weight(1f))
+                        MetricCard(title = "Total Groups", value = groups.size.toString(), modifier = Modifier.weight(1f))
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        MetricCard(title = "Transactions", value = totalTransactionsCount.toString(), modifier = Modifier.weight(1f))
-                        MetricCard(title = "Volume (₹)", value = "%.2f".format(totalVolume), modifier = Modifier.weight(1f))
+                        MetricCard(title = "Transactions", value = metrics.transactionCount.toString(), modifier = Modifier.weight(1f))
+                        // Expenses only: transfers are money moving between friends, not spending.
+                        MetricCard(title = "Total spending", value = formatRupees(metrics.spendingPaise), modifier = Modifier.weight(1f))
                     }
 
                     TabSection(
@@ -112,52 +109,39 @@ fun AdminPanelScreen(
                         onUserSearchChange = { userSearchQuery = it },
                         groupSearchQuery = groupSearchQuery,
                         onGroupSearchChange = { groupSearchQuery = it },
-                        onGroupClick = { txs, name ->
-                            selectedGroupTransactions = txs
-                            selectedGroupName = name
-                        }
+                        onGroupClick = { selectedGroup = it },
+                        onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
                     )
                 }
             }
         }
     }
 
-    // View Transactions Dialog
-    if (selectedGroupTransactions != null) {
+    // View Transactions Dialog: names, not ids; unreadable rows are shown as such.
+    selectedGroup?.let { group ->
+        val name = group["name"] as? String ?: "Unnamed Group"
+        val members = group["members"] as? List<Map<String, Any>> ?: emptyList()
+        val txs = group["transactions"] as? List<Map<String, Any>> ?: emptyList()
         AlertDialog(
-            onDismissRequest = { selectedGroupTransactions = null },
-            title = { Text("Ledger: $selectedGroupName", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { selectedGroup = null },
+            title = { Text("Ledger: $name", fontWeight = FontWeight.Bold) },
             text = {
-                val txs = selectedGroupTransactions ?: emptyList()
                 if (txs.isEmpty()) {
-                    Text("No transactions logged in this group yet.", color = Color.Gray)
+                    Text("No transactions logged in this group yet.")
                 } else {
                     Box(modifier = Modifier.heightIn(max = 400.dp)) {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(txs) { tx ->
-                                val type = tx["type"] as? String ?: "expense"
-                                val amount = tx["amount"] as? String ?: "0"
+                            items(txs.asReversed()) { tx ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (type == "expense") Color(0xFFF1F8E9) else Color(0xFFE8F5E9)
-                                    )
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                                 ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        if (type == "expense") {
-                                            val desc = tx["description"] as? String ?: ""
-                                            val payerId = (tx["payerId"] as? Number)?.toInt() ?: -1
-                                            Text("🛒 Expense: $desc", fontWeight = FontWeight.Bold)
-                                            Text("Payer ID: $payerId", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        } else {
-                                            val fromId = (tx["fromId"] as? Number)?.toInt() ?: -1
-                                            val toId = (tx["toId"] as? Number)?.toInt() ?: -1
-                                            Text("💸 Transfer", fontWeight = FontWeight.Bold)
-                                            Text("Sender: $fromId ➡️ Receiver: $toId", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("Amount: ₹$amount", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                    }
+                                    Text(
+                                        text = adminLedgerLine(tx, members),
+                                        modifier = Modifier.padding(12.dp),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -165,7 +149,7 @@ fun AdminPanelScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { selectedGroupTransactions = null }) {
+                Button(onClick = { selectedGroup = null }) {
                     Text("Close")
                 }
             }
@@ -183,21 +167,21 @@ fun MetricCard(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(title, style = MaterialTheme.typography.bodySmall, color = Color.Gray, textAlign = TextAlign.Center)
+            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF203A43), textAlign = TextAlign.Center)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
         }
     }
 }
 
-@Suppress("UNCHECKED_CAST", "DEPRECATION")
+@Suppress("UNCHECKED_CAST")
 @Composable
 fun TabSection(
     firebaseService: FirebaseService,
@@ -207,16 +191,20 @@ fun TabSection(
     onUserSearchChange: (String) -> Unit,
     groupSearchQuery: String,
     onGroupSearchChange: (String) -> Unit,
-    onGroupClick: (List<Map<String, Any>>, String) -> Unit
+    onGroupClick: (Map<String, Any>) -> Unit,
+    onMessage: (String) -> Unit = {}
 ) {
-    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
+
+    // Moderation is destructive and affects other people: always confirm first, then report the outcome.
+    var pendingBan by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }   // uid, email, currentlyBanned
+    var pendingDeleteGroup by remember { mutableStateOf<Pair<String, String>?>(null) }      // id, name
 
     Column(modifier = Modifier.fillMaxWidth()) {
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.Transparent,
-            contentColor = Color(0xFF203A43)
+            contentColor = MaterialTheme.colorScheme.primary
         ) {
             Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Users (${users.size})") })
             Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Groups (${groups.size})") })
@@ -250,7 +238,7 @@ fun TabSection(
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(
@@ -258,59 +246,39 @@ fun TabSection(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(email, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(email, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
                                 if (isSuperAdmin) {
                                     Text(
-                                        text = "Super Admin 👑",
-                                        color = Color(0xFFD4AF37),
+                                        text = "Super Admin",
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 } else if (isBanned) {
                                     Text(
-                                        text = "Banned 🚫",
-                                        color = Color.Red,
+                                        text = "Banned",
+                                        color = MaterialTheme.colorScheme.error,
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("UID: $uid", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            Text("Groups Joined: ${userGroups.size}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            
+                            Text("UID: $uid", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Groups Joined: ${userGroups.size}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                             if (!isSuperAdmin) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                firebaseService.banUser(uid, !isBanned)
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (isBanned) Color(0xFF2E7D32) else Color(0xFFC62828)
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp)
-                                    ) {
-                                        Text(if (isBanned) "Unban" else "Ban User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                firebaseService.deleteUser(uid)
-                                            }
-                                        },
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = Color(0xFFC62828)
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp)
-                                    ) {
-                                        Text("Delete User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
+                                Button(
+                                    onClick = { pendingBan = Triple(uid, email, isBanned) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isBanned) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                        contentColor = if (isBanned) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onError
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text(if (isBanned) "Unban" else "Ban User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -339,49 +307,42 @@ fun TabSection(
                     val name = group["name"] as? String ?: "Unnamed Group"
                     val id = group["id"] as? String ?: ""
                     val members = group["members"] as? List<Map<String, Any>> ?: emptyList()
-                    val transactions = group["transactions"] as? List<Map<String, Any>> ?: emptyList()
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("ID: $id", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("ID: $id", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.height(6.dp))
-                            
+
                             Text("Members:", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall)
                             Text(
                                 text = members.joinToString { it["name"] as? String ?: "" },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
-                                    onClick = {
-                                        onGroupClick(transactions, name)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF203A43)),
+                                    onClick = { onGroupClick(group) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.height(36.dp)
                                 ) {
-                                    Text("🔍 View Ledger", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("View Ledger", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
-                                
+
                                 OutlinedButton(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            firebaseService.deleteGroup(id)
-                                        }
-                                    },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828)),
+                                    onClick = { pendingDeleteGroup = id to name },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.height(36.dp)
                                 ) {
-                                    Text("🗑️ Delete Group", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Delete Group", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -389,5 +350,40 @@ fun TabSection(
                 }
             }
         }
+    }
+
+    pendingBan?.let { (uid, email, isBanned) ->
+        ConfirmDialog(
+            title = if (isBanned) "Unban $email?" else "Ban $email?",
+            message = if (isBanned) "They will be able to use SplitShare again."
+            else "They will be blocked from SplitShare straight away, even if they are signed in right now.",
+            confirmLabel = if (isBanned) "Unban" else "Ban",
+            destructive = !isBanned,
+            onConfirm = {
+                val result = firebaseService.banUser(uid, !isBanned)
+                onMessage(
+                    if (result.isSuccess) (if (isBanned) "$email unbanned" else "$email banned")
+                    else "Couldn't update $email. Check your connection and try again."
+                )
+            },
+            onDismiss = { pendingBan = null }
+        )
+    }
+
+    pendingDeleteGroup?.let { (id, name) ->
+        ConfirmDialog(
+            title = "Delete \"$name\"?",
+            message = "This deletes the group and all its transactions for everyone, and removes it from every member's list. This can't be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                val result = firebaseService.deleteGroup(id)
+                onMessage(
+                    if (result.isSuccess) "\"$name\" deleted"
+                    else "Couldn't delete \"$name\". Check your connection and try again."
+                )
+            },
+            onDismiss = { pendingDeleteGroup = null }
+        )
     }
 }

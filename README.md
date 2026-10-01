@@ -1,7 +1,7 @@
-<h1 align="center">Expense Splitter 💸</h1>
+<h1 align="center">SplitShare 💸</h1>
 
 <p align="center">
-  A sleek, modern Android application built to simplify group expenses. Features an itemized ledger system to track both group expenses and direct peer-to-peer transfers, automatically calculating the minimal transactions needed to settle up.
+  A modern Android app for splitting group expenses. Keep an itemized ledger of shared expenses and direct transfers, and see at a glance who owes whom, with a short list of payments that settles everyone up.
 </p>
 
 <p align="center">
@@ -20,37 +20,33 @@
 
 ## 🌟 Features
 
-- **Multi-User Authentication:** Fast and secure user accounts utilizing email and password via Firebase Authentication.
-- **Real-Time Syncing:** All expenses, group members, and transfers are synced instantly using Google Cloud Firestore, keeping all users up to date dynamically.
-- **Create & Join Groups:** Share unique, generated group codes to easily invite friends and family to join your ledger.
-- **Itemized Ledger System:** Record specific expenses (e.g. "Movie Tickets") and specify who paid for them.
-- **Peer-to-Peer Transfers:** Log direct cash advances or payments from one person to another (e.g. "Person A gave Person B an advance of ₹1500").
-- **Smart Settlements:** Automatically calculates the total group expenditure, balances out all expenses and transfers, and utilizes a greedy algorithm to output the absolute minimal number of direct transactions required to square up everyone.
-- **Dynamic Members:** Easily add and manage group members dynamically.
-- **Premium Material 3 UI:** Features a gorgeous, card-based interface with sliding filter chips, bottom sheet dialogs, and a clean three-tab navigation layout built entirely in Jetpack Compose.
+- **Accounts:** sign in with email and password, or with Google, through Firebase Authentication. Password reset by email is built in.
+- **Real-time sync:** expenses, members and transfers sync instantly through Cloud Firestore. Every edit is applied as one safe change, so two people adding expenses at the same moment never overwrite each other.
+- **Create and join groups:** share a group code (or use the Share button) to invite people. When you join, say which existing member you are, or join as a new member, so nobody is listed twice and newcomers never owe for expenses from before they joined.
+- **Itemized ledger:** record expenses and choose who paid and who the expense is split between. Every row shows who added it and when.
+- **Transfers:** log money one person gave another directly.
+- **Exact money math:** all amounts are handled in whole paise, never floating point, so shares always add up to the total. When an amount doesn't divide evenly, the extra paise are spread fairly.
+- **Settle up:** the Summary tab shows each person's balance and a short list of payments that settles the group. It is a greedy method that gives a small number of payments, not always the absolute minimum.
+- **Safe to use:** deleting a transaction or removing a member always asks first, and a member with transactions can't be removed.
+- **Light and dark mode** in one consistent brand theme.
 
 ## 📸 Screenshots
 
-*(Add screenshots of your app here)*
-<!-- 
-<p align="center">
-  <img src="link_to_screenshot_1.png" width="30%">
-  <img src="link_to_screenshot_2.png" width="30%">
-</p> 
--->
+Screenshots are not included yet.
 
-## 🛠️ Tech Stack
+## 🛠️ Tech stack
 
 - **Language:** [Kotlin](https://kotlinlang.org/)
-- **UI Toolkit:** [Jetpack Compose](https://developer.android.com/jetpack/compose)
-- **Architecture/Design:** Material Design 3 (M3)
-- **Build System:** Gradle (Kotlin DSL)
+- **UI:** [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material Design 3
+- **Navigation:** Navigation 3
+- **Backend:** Firebase Authentication and Cloud Firestore
+- **Build:** Gradle (Kotlin DSL)
 
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
-- Android Studio (Jellyfish or newer recommended)
-- JDK 17+
+- Android Studio (current stable release recommended)
+- JDK 17
 
 ### Installation
 
@@ -58,21 +54,34 @@
    ```bash
    git clone https://github.com/redmas45/Split_app.git
    ```
-2. Open the project in **Android Studio**.
-3. Sync the project with Gradle files.
-4. Run the app on an emulator or a physical Android device.
+2. Open the project in **Android Studio** and let Gradle sync.
+3. Run the app on an emulator or a physical device.
 
-### Building from Command Line
-To build a debug APK directly from your terminal:
+### Building from the command line
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDebug        # debug APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew testDebugUnitTest    # unit tests
+./gradlew lintDebug            # lint
 ```
-The APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
+Instrumented (on-device) tests need an emulator or phone:
+```bash
+./gradlew connectedDebugAndroidTest
+```
+
+## 🔒 Firestore security rules
+
+The app's real protection is its Firestore rules, kept in [`firestore.rules`](firestore.rules) (with [`firebase.json`](firebase.json)) so they can be reviewed. **Don't deploy them until every user has installed an app version that reads groups one at a time** (older versions run a query the rules deny). Test them in the Firebase console's Rules Playground first. Note the admin check requires the admin account's email to be verified.
+
+## 📦 Releasing
+
+CI runs on every push and pull request (unit tests, lint, debug build). A release is built and published only when you push a version tag:
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+The release job signs the APK with a key you keep out of the repo. Add these **GitHub Secrets** first: `KEYSTORE_BASE64` (your `.jks` file, base64-encoded), `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. Create the key once with `keytool -genkeypair -v -keystore splitshare-release.jks -alias splitshare -keyalg RSA -keysize 2048 -validity 10000`, and register its SHA-1 and SHA-256 fingerprints in the Firebase console (needed for Google sign-in).
 
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](../../issues).
-
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).

@@ -1,13 +1,9 @@
 package com.example.splitapp
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,16 +15,10 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    // Setup local notification channel
+    // Setup local notification channel. (The notification permission is NOT requested here any more: asking at
+    // first launch, before login and with no explanation, mostly gets a "no". It is asked once, with context,
+    // after the user first creates or joins a group.)
     NotificationHelper.createNotificationChannel(this)
-
-    // Request notification permission for Android 13+
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      val launcher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
-      if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-      }
-    }
 
     enableEdgeToEdge()
     setContent {

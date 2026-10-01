@@ -1,19 +1,23 @@
-package com.example.splitapp.ui.login
+﻿package com.example.splitapp.ui.login
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.splitapp.data.FirebaseService
+import com.example.splitapp.theme.BrandCyan
+import com.example.splitapp.theme.BrandGradient
+import com.example.splitapp.theme.BrandInk900
 
 @Composable
 fun BannedScreen(
@@ -21,22 +25,17 @@ fun BannedScreen(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val gradientBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F2027),
-            Color(0xFF1C1E24)
-        )
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(gradientBrush),
+            .background(BrandGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .safeDrawingPadding()
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -76,8 +75,8 @@ fun BannedScreen(
                     .height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF5252),
-                    contentColor = Color.White
+                    containerColor = BrandCyan,
+                    contentColor = BrandInk900
                 )
             ) {
                 Text("LOG OUT & SWITCH ACCOUNT", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)

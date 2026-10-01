@@ -1,50 +1,70 @@
-package com.example.splitapp.ui.main
+﻿package com.example.splitapp.ui.main
 
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.splitapp.R
 import com.example.splitapp.data.FirebaseService
+import com.example.splitapp.data.GroupState
+import com.example.splitapp.domain.FormResult
+import com.example.splitapp.domain.Member
+import com.example.splitapp.domain.Transaction
+import com.example.splitapp.domain.TransactionDraft
+import com.example.splitapp.domain.TxKind
+import com.example.splitapp.domain.addedByName
+import com.example.splitapp.domain.computeBalances
+import com.example.splitapp.domain.deleteMessage
+import com.example.splitapp.domain.deleteSummary
+import com.example.splitapp.domain.newForeignTransactions
+import com.example.splitapp.domain.formatRupees
+import com.example.splitapp.domain.getCategoryIcon
+import com.example.splitapp.domain.memberFromMap
+import com.example.splitapp.domain.memberName
+import com.example.splitapp.domain.removalBlockReason
+import com.example.splitapp.domain.settle
+import com.example.splitapp.domain.splitLabel
+import com.example.splitapp.domain.totalExpensePaise
+import com.example.splitapp.domain.transactionFromMap
+import com.example.splitapp.domain.validateDraft
+import com.example.splitapp.ui.common.ConfirmDialog
 import kotlinx.coroutines.launch
-
-data class Member(val id: Int, val name: String)
-
-sealed class Transaction {
-    abstract val id: Int
-    data class Expense(override val id: Int, val description: String, val payerId: Int, val amount: String) : Transaction()
-    data class Transfer(override val id: Int, val fromId: Int, val toId: Int, val amount: String) : Transaction()
-}
-
-// Automatic icon resolution based on description content
-fun getCategoryIcon(desc: String): String {
-    val d = desc.lowercase()
-    return when {
-        d.contains("food") || d.contains("dinner") || d.contains("lunch") || d.contains("cafe") || d.contains("drink") || d.contains("eat") || d.contains("restaurant") || d.contains("snack") || d.contains("tea") -> "🍔"
-        d.contains("cab") || d.contains("taxi") || d.contains("fuel") || d.contains("car") || d.contains("bus") || d.contains("travel") || d.contains("flight") || d.contains("trip") || d.contains("metro") || d.contains("train") -> "🚗"
-        d.contains("shopping") || d.contains("dress") || d.contains("gift") || d.contains("grocer") || d.contains("mart") || d.contains("buy") || d.contains("store") -> "🛍️"
-        d.contains("movie") || d.contains("ticket") || d.contains("show") || d.contains("game") || d.contains("play") || d.contains("ent") -> "🎟️"
-        d.contains("rent") || d.contains("bill") || d.contains("elect") || d.contains("wifi") || d.contains("stay") || d.contains("hotel") || d.contains("room") -> "🏠"
-        else -> "📄"
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,73 +77,58 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    
-    val groupState = remember(groupId) { firebaseService.observeGroup(groupId) }.collectAsState(initial = null)
-    var currentTab by remember { mutableStateOf("Members") }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val group = groupState.value
+    val groupState = remember(groupId) { firebaseService.observeGroup(groupId) }.collectAsState(initial = GroupState.Loading)
+    var currentTab by rememberSaveable { mutableStateOf("Members") }
 
+    val group = (groupState.value as? GroupState.Ready)?.group
     if (group == null) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-        }
+        GroupUnavailable(groupState.value, onBackClick, modifier)
         return
     }
 
+    fun showMessage(message: String) {
+        coroutineScope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    // A failed group edit is shown to the user as a Snackbar; returns whether the edit went through.
+    fun report(result: Result<Unit>): Boolean {
+        result.exceptionOrNull()?.let { showMessage(it.message ?: "Something went wrong. Please try again.") }
+        return result.isSuccess
+    }
+
     // Map Firestore document data to domain models
-    val members = group.members.mapNotNull { map ->
-        val id = (map["id"] as? Number)?.toInt()
-        val name = map["name"] as? String
-        if (id != null && name != null) Member(id, name) else null
-    }
+    val members = remember(group) { group.members.mapNotNull { memberFromMap(it) } }
+    val transactions = remember(group) { group.transactions.mapNotNull { transactionFromMap(it) } }
 
-    val transactions = group.transactions.mapNotNull { map ->
-        val id = (map["id"] as? Number)?.toInt() ?: return@mapNotNull null
-        val type = map["type"] as? String ?: return@mapNotNull null
-        val amount = map["amount"] as? String ?: return@mapNotNull null
-        when (type) {
-            "expense" -> {
-                val description = map["description"] as? String ?: ""
-                val payerId = (map["payerId"] as? Number)?.toInt() ?: return@mapNotNull null
-                Transaction.Expense(id, description, payerId, amount)
-            }
-            "transfer" -> {
-                val fromId = (map["fromId"] as? Number)?.toInt() ?: return@mapNotNull null
-                val toId = (map["toId"] as? Number)?.toInt() ?: return@mapNotNull null
-                Transaction.Transfer(id, fromId, toId, amount)
-            }
-            else -> null
-        }
-    }
 
-    val previousTxCount = remember { mutableIntStateOf(-1) }
-    
-    LaunchedEffect(transactions.size) {
-        if (previousTxCount.intValue != -1 && transactions.size > previousTxCount.intValue) {
-            val latestTx = transactions.lastOrNull()
-            if (latestTx != null) {
-                val text = when (latestTx) {
-                    is Transaction.Expense -> "New Expense: ₹${latestTx.amount} for ${latestTx.description}"
-                    is Transaction.Transfer -> "New Transfer: ₹${latestTx.amount}"
-                }
-                com.example.splitapp.data.NotificationHelper.showPaymentNotification(
-                    context = context,
-                    title = "New Activity in $groupName",
-                    text = text
-                )
-            }
+    val title = group.name.ifEmpty { groupName }
+
+    // Notify only about transactions someone ELSE added since we last looked: never our own, never deletions, and not
+    // the rows that were already there when the screen opened.
+    var seenIds by remember { mutableStateOf<Set<Int>?>(null) }
+    LaunchedEffect(transactions) {
+        val myUid = firebaseService.currentUser?.uid
+        newForeignTransactions(seenIds, transactions, myUid).forEach { tx ->
+            com.example.splitapp.data.NotificationHelper.showPaymentNotification(
+                context = context,
+                title = "New activity in $title",
+                text = deleteSummary(tx, members)
+            )
         }
-        previousTxCount.intValue = transactions.size
+        seenIds = transactions.map { it.id }.toSet()
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(groupName, fontWeight = FontWeight.Bold)
+                        Text(title, fontWeight = FontWeight.Bold)
                         Text(
-                            text = "Code: $groupId", 
+                            text = "Code: $groupId",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )
@@ -131,7 +136,7 @@ fun MainScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Text("⬅️", fontSize = 20.sp)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -141,7 +146,16 @@ fun MainScreen(
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Group code copied to clipboard!", Toast.LENGTH_SHORT).show()
                     }) {
-                        Text("📋", fontSize = 20.sp)
+                        Icon(painterResource(R.drawable.ic_content_copy), contentDescription = "Copy group code")
+                    }
+                    IconButton(onClick = {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Join my SplitShare group \"$title\" with code: $groupId")
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share group code"))
+                    }) {
+                        Icon(Icons.Filled.Share, contentDescription = "Share group code")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -157,13 +171,11 @@ fun MainScreen(
                         selected = currentTab == tab,
                         onClick = { currentTab = tab },
                         icon = {
-                            Text(
-                                when (tab) {
-                                    "Members" -> "👥"
-                                    "Ledger" -> "💸"
-                                    else -> "📊"
-                                }, fontSize = 24.sp
-                            )
+                            when (tab) {
+                                "Members" -> Icon(Icons.Filled.Person, contentDescription = null)
+                                "Ledger" -> Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
+                                else -> Icon(painterResource(R.drawable.ic_bar_chart), contentDescription = null)
+                            }
                         },
                         label = { Text(tab) }
                     )
@@ -171,43 +183,20 @@ fun MainScreen(
             }
         }
     ) { paddingValues ->
-        Box(modifier = modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF7F9FC))) {
+        Box(modifier = modifier.fillMaxSize().padding(paddingValues).background(MaterialTheme.colorScheme.background)) {
             when (currentTab) {
                 "Members" -> MembersTab(
                     members = members,
-                    onMembersChange = { updatedMembers ->
-                        coroutineScope.launch {
-                            val membersMap = updatedMembers.map { mapOf("id" to it.id, "name" to it.name) }
-                            firebaseService.updateGroupData(groupId, membersMap, group.transactions)
-                        }
-                    }
+                    transactions = transactions,
+                    onAddMember = { name -> report(firebaseService.addMember(groupId, name)) },
+                    onRemoveMember = { id -> report(firebaseService.removeMember(groupId, id)) },
+                    onMessage = ::showMessage
                 )
                 "Ledger" -> TransactionsTab(
                     members = members,
                     transactions = transactions,
-                    onTxChange = { updatedTxs ->
-                        coroutineScope.launch {
-                            val txsMap = updatedTxs.map { tx ->
-                                when (tx) {
-                                    is Transaction.Expense -> mapOf(
-                                        "id" to tx.id,
-                                        "type" to "expense",
-                                        "description" to tx.description,
-                                        "payerId" to tx.payerId,
-                                        "amount" to tx.amount
-                                    )
-                                    is Transaction.Transfer -> mapOf(
-                                        "id" to tx.id,
-                                        "type" to "transfer",
-                                        "fromId" to tx.fromId,
-                                        "toId" to tx.toId,
-                                        "amount" to tx.amount
-                                    )
-                                }
-                            }
-                            firebaseService.updateGroupData(groupId, group.members, txsMap)
-                        }
-                    }
+                    onAdd = { draft -> report(firebaseService.addTransaction(groupId, draft)) },
+                    onDelete = { txId -> report(firebaseService.deleteTransaction(groupId, txId)) }
                 )
                 "Summary" -> SummaryTab(members, transactions)
             }
@@ -216,14 +205,44 @@ fun MainScreen(
 }
 
 @Composable
+private fun GroupUnavailable(state: GroupState, onBackClick: () -> Unit, modifier: Modifier = Modifier) {
+    val message = when (state) {
+        GroupState.NotFound -> "This group no longer exists."
+        is GroupState.Failed -> state.message
+        else -> null
+    }
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (message == null) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = onBackClick) { Text("Back") }
+            }
+        }
+    }
+}
+
+@Composable
 fun MembersTab(
     members: List<Member>,
-    onMembersChange: (List<Member>) -> Unit
+    transactions: List<Transaction>,
+    onAddMember: suspend (String) -> Boolean,
+    onRemoveMember: suspend (Int) -> Unit,
+    onMessage: (String) -> Unit
 ) {
-    var newName by remember { mutableStateOf("") }
+    var newName by rememberSaveable { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
+    var pendingRemove by rememberSaveable { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // The member vanished (removed elsewhere): nothing left to confirm.
+    val pending = members.firstOrNull { it.id == pendingRemove }
+    LaunchedEffect(pending) { if (pendingRemove != null && pending == null) pendingRemove = null }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Group Members", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF0F2027))
+        Text("Group Members", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -231,37 +250,44 @@ fun MembersTab(
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(18.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("👤", fontSize = 16.sp)
+                                Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(member.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                member.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
                         }
                         if (members.size > 1) {
                             IconButton(
-                                onClick = { onMembersChange(members.filter { it.id != member.id }) }
+                                onClick = {
+                                    // Say why straight away (no round trip) when removal isn't allowed; otherwise confirm first.
+                                    val reason = removalBlockReason(member, transactions)
+                                    if (reason != null) onMessage(reason) else pendingRemove = member.id
+                                }
                             ) {
-                                Text("❌", fontSize = 14.sp)
+                                Icon(Icons.Filled.Close, contentDescription = "Remove ${member.name}", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -270,76 +296,125 @@ fun MembersTab(
                 modifier = Modifier.weight(1f),
                 label = { Text("Add group member") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 shape = RoundedCornerShape(12.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
-                    if (newName.isNotBlank() && members.size < 30) {
-                        val maxId = members.maxOfOrNull { it.id } ?: 0
-                        onMembersChange(members + Member(maxId + 1, newName.trim()))
-                        newName = ""
+                    scope.launch {
+                        adding = true
+                        if (onAddMember(newName.trim())) newName = ""
+                        adding = false
                     }
                 },
+                enabled = newName.isNotBlank() && !adding && members.size < 30,
                 modifier = Modifier.height(56.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Add", fontWeight = FontWeight.Bold)
+                if (adding) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("Add", fontWeight = FontWeight.Bold)
             }
         }
     }
+
+    if (pending != null) {
+        ConfirmDialog(
+            title = "Remove ${pending.name}?",
+            message = "${pending.name} will be removed from this group.",
+            confirmLabel = "Remove",
+            destructive = true,
+            onConfirm = { onRemoveMember(pending.id) },
+            onDismiss = { pendingRemove = null }
+        )
+    }
 }
+
+private val IntSetSaver = listSaver<Set<Int>, Int>(save = { it.toList() }, restore = { it.toSet() })
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionsTab(
     members: List<Member>,
     transactions: List<Transaction>,
-    onTxChange: (List<Transaction>) -> Unit
+    onAdd: suspend (TransactionDraft) -> Boolean,
+    onDelete: suspend (Int) -> Unit
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
-    var txType by remember { mutableStateOf("Expense") }
-    
-    var desc by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var payerId by remember { mutableIntStateOf(members.firstOrNull()?.id ?: -1) }
-    var receiverId by remember { mutableIntStateOf(members.getOrNull(1)?.id ?: -1) }
+    val scope = rememberCoroutineScope()
+
+    // Everything the user typed survives rotation (rememberSaveable).
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var isTransfer by rememberSaveable { mutableStateOf(false) }
+    var desc by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var fromId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var toId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var splitIds by rememberSaveable(stateSaver = IntSetSaver) { mutableStateOf(emptySet<Int>()) }
+    var amountTouched by rememberSaveable { mutableStateOf(false) }
+    var descTouched by rememberSaveable { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var pendingDelete by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    fun resetForm() {
+        isTransfer = false
+        desc = ""
+        amount = ""
+        fromId = members.firstOrNull()?.id
+        toId = members.getOrNull(1)?.id
+        splitIds = members.map { it.id }.toSet()   // everyone, by default
+        amountTouched = false
+        descTouched = false
+    }
+
+    // The row vanished (deleted by someone else while the dialog was open): nothing left to confirm.
+    val pendingTx = transactions.firstOrNull { it.id == pendingDelete }
+    LaunchedEffect(pendingTx) { if (pendingDelete != null && pendingTx == null) pendingDelete = null }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Ledger Room", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF0F2027))
+            Text("Ledger Room", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.height(16.dp))
 
             if (transactions.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("No transactions logged yet.", color = Color.Gray, style = MaterialTheme.typography.bodyLarge)
+                    Text("No transactions logged yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
-                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(transactions) { tx ->
+                // Newest first; bottom padding keeps the last row clear of the ➕ button.
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 88.dp)
+                ) {
+                    items(transactions.asReversed()) { tx ->
                         val icon = if (tx is Transaction.Expense) getCategoryIcon(tx.description) else "💸"
-                        
+                        val title = if (tx is Transaction.Expense) tx.description.trim().ifEmpty { "Expense" } else "Transfer"
+                        val subtitle = when (tx) {
+                            is Transaction.Expense -> "Paid by ${memberName(members, tx.payerId)}"
+                            is Transaction.Transfer -> "${memberName(members, tx.fromId)} ➡️ ${memberName(members, tx.toId)}"
+                        }
+                        val meta = listOfNotNull(
+                            addedByName(tx, members)?.let { "Added by $it" },
+                            tx.createdAt?.let { at ->
+                                if (System.currentTimeMillis() - at < DateUtils.MINUTE_IN_MILLIS) "Just now"
+                                else DateUtils.getRelativeTimeSpanString(at).toString()
+                            }
+                        ).joinToString(" · ")
+
                         ElevatedCard(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = Color.White
-                            )
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                            // Top line: icon, what it is, delete. The amount sits on its own line below, so a long amount
+                            // or a large font can never squeeze the title (which wraps instead of being cut).
+                            Column(modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 12.dp, end = 4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
                                             .size(44.dp)
                                             .background(
-                                                color = if (tx is Transaction.Expense) Color(0xFFE8F5E9) else Color(0xFFE3F2FD),
+                                                color = if (tx is Transaction.Expense) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
                                                 shape = RoundedCornerShape(12.dp)
                                             ),
                                         contentAlignment = Alignment.Center
@@ -347,32 +422,42 @@ fun TransactionsTab(
                                         Text(icon, fontSize = 22.sp)
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
-                                    Column {
-                                        if (tx is Transaction.Expense) {
-                                            Text(tx.description, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F2027))
-                                            val payerName = members.find { it.id == tx.payerId }?.name ?: "Unknown"
-                                            Text("Paid by $payerName", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        } else if (tx is Transaction.Transfer) {
-                                            val fromName = members.find { it.id == tx.fromId }?.name ?: "Unknown"
-                                            val toName = members.find { it.id == tx.toId }?.name ?: "Unknown"
-                                            Text("Transfer Payment", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F2027))
-                                            Text("$fromName ➡️ $toName", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    // Never deletes directly: opens the confirmation dialog below.
+                                    IconButton(onClick = { pendingDelete = tx.id }) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Delete transaction: $title",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(end = 12.dp, top = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                        splitLabel(tx, members)?.let {
+                                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        if (meta.isNotEmpty()) {
+                                            Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
                                     Text(
-                                        "₹${if (tx is Transaction.Expense) tx.amount else (tx as Transaction.Transfer).amount}",
+                                        formatRupees(tx.amountPaise),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (tx is Transaction.Expense) Color(0xFFC62828) else Color(0xFF1565C0)
+                                        color = if (tx is Transaction.Expense) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        maxLines = 1
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    IconButton(
-                                        onClick = { onTxChange(transactions.filter { it.id != tx.id }) }
-                                    ) {
-                                        Text("❌", fontSize = 12.sp)
-                                    }
                                 }
                             }
                         }
@@ -380,126 +465,142 @@ fun TransactionsTab(
                 }
             }
         }
-        
+
         FloatingActionButton(
-            onClick = { 
-                if (members.isNotEmpty()) {
-                    payerId = members.first().id
-                    receiverId = members.getOrNull(1)?.id ?: members.first().id
-                }
-                showAddDialog = true 
+            onClick = {
+                resetForm()
+                showAddDialog = true
             },
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            containerColor = Color(0xFF203A43),
-            contentColor = Color.White
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            Text("➕", fontSize = 22.sp)
+            Icon(Icons.Filled.Add, contentDescription = "Add transaction")
         }
     }
 
+    if (pendingTx != null) {
+        ConfirmDialog(
+            title = "Delete this transaction?",
+            message = deleteMessage(pendingTx, members),
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = { onDelete(pendingTx.id) },
+            onDismiss = { pendingDelete = null }
+        )
+    }
+
     if (showAddDialog) {
-        ModalBottomSheet(onDismissRequest = { showAddDialog = false }) {
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        val result = validateDraft(
+            kind = if (isTransfer) TxKind.Transfer else TxKind.Expense,
+            amountText = amount, description = desc, fromId = fromId, toId = toId,
+            splitIds = splitIds, memberIds = members.map { it.id }.toSet()
+        )
+        val errors = (result as? FormResult.Invalid)?.errors
+
+        ModalBottomSheet(onDismissRequest = {
+            showAddDialog = false
+            resetForm()
+        }) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text("Add New Transaction", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Row(modifier = Modifier.fillMaxWidth()) {
                     FilterChip(
-                        selected = txType == "Expense",
-                        onClick = { txType = "Expense" },
-                        label = { Text("Expense 🛒") },
+                        selected = !isTransfer,
+                        onClick = { isTransfer = false },
+                        label = { Text("Expense") },
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     FilterChip(
-                        selected = txType == "Transfer",
-                        onClick = { txType = "Transfer" },
-                        label = { Text("Transfer 💸") },
+                        selected = isTransfer,
+                        onClick = { isTransfer = true },
+                        enabled = members.size >= 2,
+                        label = { Text("Transfer") },
                         modifier = Modifier.weight(1f)
                     )
                 }
-                
+                if (members.size < 2) {
+                    Text(
+                        "Add another member first",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it },
+                    onValueChange = { amount = it; amountTouched = true },
                     label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = amountTouched && errors?.amount != null,
+                    supportingText = { if (amountTouched) errors?.amount?.let { Text(it) } },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = if (isTransfer) ImeAction.Done else ImeAction.Next),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
-                
-                if (txType == "Expense") {
+
+                if (!isTransfer) {
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = desc,
-                        onValueChange = { desc = it },
+                        onValueChange = { desc = it; descTouched = true },
                         label = { Text("Description (e.g. Dinner, Tickets)") },
+                        isError = descTouched && errors?.description != null,
+                        supportingText = { if (descTouched) errors?.description?.let { Text(it) } },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Paid By:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    LazyRow(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        items(members) { m ->
-                            FilterChip(
-                                selected = payerId == m.id,
-                                onClick = { payerId = m.id },
-                                label = { Text(m.name) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        }
-                    }
+                    MemberChips(members, selected = { fromId == it }, onClick = { fromId = it })
+                    errors?.people?.let { ErrorText(it) }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Split between:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    MemberChips(
+                        members,
+                        selected = { it in splitIds },
+                        onClick = { splitIds = if (it in splitIds) splitIds - it else splitIds + it }
+                    )
+                    errors?.split?.let { ErrorText(it) }
                 } else {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("From (Sender):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    LazyRow(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        items(members) { m ->
-                            FilterChip(
-                                selected = payerId == m.id,
-                                onClick = { payerId = m.id },
-                                label = { Text(m.name) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        }
-                    }
+                    MemberChips(members, selected = { fromId == it }, onClick = { fromId = it })
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("To (Receiver):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    LazyRow(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        items(members) { m ->
-                            FilterChip(
-                                selected = receiverId == m.id,
-                                onClick = { receiverId = m.id },
-                                label = { Text(m.name) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        }
-                    }
+                    MemberChips(members, selected = { toId == it }, onClick = { toId = it })
+                    errors?.people?.let { ErrorText(it) }
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = {
-                        val amt = amount.toDoubleOrNull()
-                        if (amt != null && amt > 0) {
-                            val maxId = transactions.maxOfOrNull { it.id } ?: 0
-                            val nextId = maxId + 1
-                            if (txType == "Expense" && desc.isNotBlank()) {
-                                onTxChange(transactions + Transaction.Expense(nextId, desc, payerId, amount))
+                        val draft = (result as? FormResult.Valid)?.draft ?: return@Button
+                        scope.launch {
+                            saving = true
+                            val saved = onAdd(draft)
+                            saving = false
+                            if (saved) {            // fields are cleared only after a successful save
                                 showAddDialog = false
-                            } else if (txType == "Transfer" && payerId != receiverId) {
-                                onTxChange(transactions + Transaction.Transfer(nextId, payerId, receiverId, amount))
-                                showAddDialog = false
+                                resetForm()
                             }
                         }
-                        amount = ""
-                        desc = ""
                     },
+                    enabled = result is FormResult.Valid && !saving,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Save Transaction", fontWeight = FontWeight.Bold)
+                    if (saving) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Text("Save Transaction", fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -508,153 +609,133 @@ fun TransactionsTab(
 }
 
 @Composable
+private fun MemberChips(members: List<Member>, selected: (Int) -> Boolean, onClick: (Int) -> Unit) {
+    LazyRow(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        items(members) { m ->
+            FilterChip(
+                selected = selected(m.id),
+                onClick = { onClick(m.id) },
+                label = { Text(m.name) },
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ErrorText(message: String) {
+    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+}
+
+@Composable
 fun SummaryTab(members: List<Member>, transactions: List<Transaction>) {
-    val balances = mutableMapOf<Int, Double>()
-    members.forEach { balances[it.id] = 0.0 }
-    
-    var totalExpense = 0.0
-
-    transactions.forEach { tx ->
-        when (tx) {
-            is Transaction.Expense -> {
-                val amt = tx.amount.toDoubleOrNull() ?: 0.0
-                totalExpense += amt
-                balances[tx.payerId] = (balances[tx.payerId] ?: 0.0) + amt
-                
-                val split = amt / members.size
-                members.forEach { m ->
-                    balances[m.id] = (balances[m.id] ?: 0.0) - split
-                }
-            }
-            is Transaction.Transfer -> {
-                val amt = tx.amount.toDoubleOrNull() ?: 0.0
-                balances[tx.fromId] = (balances[tx.fromId] ?: 0.0) + amt
-                balances[tx.toId] = (balances[tx.toId] ?: 0.0) - amt
-            }
-        }
+    val balances = remember(members, transactions) { computeBalances(members, transactions) }
+    val totalExpense = remember(transactions) { totalExpensePaise(transactions) }
+    val settlements = remember(balances, members) {
+        settle(balances).map { "${memberName(members, it.fromId)} owes ${memberName(members, it.toId)} ${formatRupees(it.paise)}" }
     }
+    val maxAbsBalance = remember(balances) { balances.values.maxOfOrNull { kotlin.math.abs(it) } ?: 0L }
 
-    val debtors = balances.filter { it.value < -0.01 }.map { Pair(it.key, -it.value) }.toMutableList()
-    val creditors = balances.filter { it.value > 0.01 }.map { Pair(it.key, it.value) }.toMutableList()
-
-    debtors.sortByDescending { it.second }
-    creditors.sortByDescending { it.second }
-
-    val settlements = mutableListOf<String>()
-    var d = 0
-    var c = 0
-
-    while (d < debtors.size && c < creditors.size) {
-        val debtor = debtors[d]
-        val creditor = creditors[c]
-
-        val amount = minOf(debtor.second, creditor.second)
-        if (amount > 0.01) {
-            val dName = members.find { it.id == debtor.first }?.name ?: "Unknown"
-            val cName = members.find { it.id == creditor.first }?.name ?: "Unknown"
-            settlements.add("$dName owes $cName ₹%.2f".format(amount))
+    // One scrolling list for the whole tab, so the settle-up part never gets squeezed out with many members.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text("Summary & Settlements", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
-
-        debtors[d] = Pair(debtor.first, debtor.second - amount)
-        creditors[c] = Pair(creditor.first, creditor.second - amount)
-
-        if (debtors[d].second < 0.01) d++
-        if (creditors[c].second < 0.01) c++
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Summary & Settlements", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF0F2027))
-        Spacer(modifier = Modifier.height(16.dp))
 
         // Total Group Expense Display Card
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFF203A43))
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("Total Group Expense", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.8f))
-                Text("₹%.2f".format(totalExpense), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = Color.White)
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(20.dp))
-        Text("Visual Balance Share", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0F2027))
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Visual progress bars card for debts and credits
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val maxAbsBalance = balances.values.map { kotlin.math.abs(it) }.maxOrNull() ?: 1.0
-                
-                members.forEach { member ->
-                    val balance = balances[member.id] ?: 0.0
-                    val isCreditor = balance > 0.01
-                    val isDebtor = balance < -0.01
-                    val balanceText = if (isCreditor) "+₹%.2f".format(balance) else if (isDebtor) "-₹%.2f".format(-balance) else "₹0.00"
-                    
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(member.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text(
-                                text = balanceText,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isCreditor) Color(0xFF2E7D32) else if (isDebtor) Color(0xFFC62828) else Color.Gray,
-                                fontSize = 14.sp
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(4.dp))
-                        
-                        // Relative progress bar representation
-                        val ratio = (kotlin.math.abs(balance) / if (maxAbsBalance == 0.0) 1.0 else maxAbsBalance).toFloat()
-                        LinearProgressIndicator(
-                            progress = { ratio },
-                            modifier = Modifier.fillMaxWidth().height(8.dp),
-                            color = if (isCreditor) Color(0xFF2E7D32) else if (isDebtor) Color(0xFFD32F2F) else Color.LightGray,
-                            trackColor = Color(0xFFEEEEEE),
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                        )
-                    }
+        item {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Total Group Expense", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                    Text(formatRupees(totalExpense), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimary)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        Text("How to Settle Up:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0F2027))
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        if (settlements.isEmpty()) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
+        item {
+            Text(
+                "Visual Balance Share", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+
+        // One row per member: balance and a relative progress bar.
+        items(members) { member ->
+            val balance = balances[member.id] ?: 0L
+            val isCreditor = balance > 0
+            val isDebtor = balance < 0
+            val balanceText = if (isCreditor) "+${formatRupees(balance)}" else formatRupees(balance)
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Text("Everyone is settled up! 🎉", color = Color(0xFF2E7D32), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            member.name, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = balanceText,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isCreditor) MaterialTheme.colorScheme.tertiary else if (isDebtor) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val ratio = kotlin.math.abs(balance).toFloat() / (if (maxAbsBalance == 0L) 1L else maxAbsBalance)
+                    LinearProgressIndicator(
+                        progress = { ratio },
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        color = if (isCreditor) MaterialTheme.colorScheme.tertiary else if (isDebtor) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                }
+            }
+        }
+
+        item {
+            Text(
+                "How to Settle Up:", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+
+        if (settlements.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp)).padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Everyone is settled up! 🎉", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                }
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(settlements) { s ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("💸", fontSize = 20.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(s, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F2027))
-                        }
+            items(settlements) { s ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("💸", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(s, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }

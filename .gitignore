@@ -1,15 +1,46 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# ---- Build output (Gradle / Kotlin / Android) ----
+.gradle/
+build/
+.kotlin/
+.externalNativeBuild/
+.cxx/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+output-metadata.json
+
+# ---- Machine-local config & secrets (never commit) ----
 local.properties
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+keystore.properties
+
+# ---- IDE / editor ----
+.idea/
+*.iml
+.vscode/
+.fleet/
+
+# ---- OS junk ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Logs & dumps ----
+*.log
+*.hprof
+
+# ---- Firebase CLI local state ----
+.firebase/
+
+# ---- LLM working docs (local only) ----
+handoff.md
+REVIEW_FIX_PROMPT.md
+
+# ---- Claude Code per-user settings ----
+.claude/settings.local.json

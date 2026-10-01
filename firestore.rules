@@ -1,0 +1,75 @@
+rules_version = '2';
+
+// SplitShare Firestore rules. NOT DEPLOYED BY THE ASSISTANT: review them, test them in the Firebase console's
+// Rules Playground, and deploy only after EVERY user has installed an app version that reads groups one document at a
+// time (Phase 5 or later). Older installs run a `whereIn` query on `groups`, which these rules deny to normal users.
+//
+// The Firebase API key in google-services.json is public by design; these rules are the app's real protection.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // True when the caller is signed in.
+    function signedIn() { return request.auth != null; }
+
+    // Path of a user's profile document.
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+
+    // The Super Admin (ADMIN_EMAIL in FirebaseService.kt). The app's own isAdmin() only hides a button; this is the real check.
+    // CAUTION: email_verified must be true. If the admin account was created with email + password and its address was
+    // never verified, the admin is locked out: verify that email first (or move to a custom claim `admin: true`, set
+    // with the Admin SDK, which is the better long-term fix).
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email == "kalimateym2@gmail.com"
+        && request.auth.token.email_verified == true;
+    }
+
+    // True unless the caller's profile says isBanned == true (a missing profile counts as not banned).
+    function notBanned() {
+      return signedIn()
+        && (!exists(userPath(request.auth.uid))
+            || get(userPath(request.auth.uid)).data.get("isBanned", false) != true);
+    }
+
+    // True when the group id is in the caller's own `groups` list (their membership).
+    function isMember(groupId) {
+      return exists(userPath(request.auth.uid))
+        && groupId in get(userPath(request.auth.uid)).data.get("groups", []);
+    }
+
+    // True when this same batch/transaction adds groupId to the caller's own `groups` list (creating or joining).
+    function joiningNow(groupId) {
+      return groupId in getAfter(userPath(request.auth.uid)).data.get("groups", []);
+    }
+
+    match /users/{uid} {
+      // Read your own profile (the ban watcher needs it), or the admin reads any.
+      allow get:    if (signedIn() && request.auth.uid == uid) || isAdmin();
+      // Only the admin may list all users (the admin dashboard, and finding a deleted group's members).
+      allow list:   if isAdmin();
+      // Create only your own profile, and never already banned (old app versions write isBanned:false, which is fine).
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.get("isBanned", false) == false;
+      // Update your own profile but never the isBanned field; the admin may update any (ban/unban, remove a deleted group).
+      allow update: if (signedIn() && request.auth.uid == uid
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isBanned"]))
+                    || isAdmin();
+      // Only the admin deletes profiles.
+      allow delete: if isAdmin();
+    }
+
+    match /groups/{groupId} {
+      // Knowing a group's code works as an invitation: any signed-in, non-banned user may read ONE group by id.
+      allow get:    if notBanned() || isAdmin();
+      // No listing groups for normal users; only the admin dashboard lists them.
+      allow list:   if isAdmin();
+      // Create a group only if the same batch also adds it to your own `groups`.
+      allow create: if notBanned() && joiningNow(groupId);
+      // Edit a group if you are a member, or you are joining it in this same transaction.
+      allow update: if notBanned() && (isMember(groupId) || joiningNow(groupId));
+      // Only the admin deletes groups.
+      allow delete: if isAdmin();
+    }
+  }
+}

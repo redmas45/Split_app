@@ -12,14 +12,38 @@ android {
         applicationId = "com.example.splitapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        // CI sets GITHUB_RUN_NUMBER, so every release build gets a higher versionCode than the last one
+        // (an installed app can only be updated by a build with a higher versionCode).
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Release signing comes from environment variables (the release workflow fills them from GitHub Secrets), never
+    // from files in the repo. If any is missing (a normal local build) the release build is simply left unsigned.
+    val keystorePath = System.getenv("KEYSTORE_PATH")
+    val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    val signingKeyAlias = System.getenv("KEY_ALIAS")
+    val signingKeyPassword = System.getenv("KEY_PASSWORD")
+    val canSignRelease = listOf(keystorePath, keystorePassword, signingKeyAlias, signingKeyPassword).all { !it.isNullOrBlank() }
+
+    if (canSignRelease) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
+            // Minify stays off (nothing needs shrinking yet), so the proguard-rules.pro reference to a file that never
+            // existed is gone.
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (canSignRelease) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -62,6 +86,8 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
+  // Core icon set only (Delete, Share, Close, ...). Never material-icons-extended: it is very large.
+  implementation(libs.androidx.compose.material.icons.core)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests
